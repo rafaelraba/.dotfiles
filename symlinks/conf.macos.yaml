@@ -9,6 +9,7 @@
     - ~/.hushlogin
 
 - link:
+    ~/.config/nvim: editors/nvim
     ~/.dotly: os/mac/.dotly
     ~/bin/bash: /opt/homebrew/bin/bash
     ~/bin/date: /opt/homebrew/bin/gdate
