@@ -1,0 +1,17 @@
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets (nunca commitear)
+.env
+*.secret
+*credentials*
+
+# Zim modules (se reinstalan automáticamente)
+shell/zsh/.zim/modules/
