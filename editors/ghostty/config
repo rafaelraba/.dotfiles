@@ -1,0 +1,68 @@
+#############################################################
+# ℹ️ Reminder: You can reload the config with `cmd+shift+,`  #
+# `ghostty +show-config --default --docs`                   #
+#############################################################
+
+shell-integration = zsh
+
+# 🪟 Window
+
+macos-titlebar-style = hidden
+background-opacity = 0.87
+background-blur-radius = 20
+window-save-state = always
+window-height = 14
+window-width = 180
+window-padding-balance = true
+window-colorspace = display-p3
+mouse-scroll-multiplier = 2
+mouse-hide-while-typing = true
+unfocused-split-opacity = 0.70
+
+# 📝 Font
+
+font-size = 15
+font-thicken = true
+adjust-cell-height = 30%
+font-family = JetbrainsMono Nerd Font Medium
+
+# 📋 Clipboard
+
+clipboard-read = allow
+clipboard-write = allow
+copy-on-select = false
+
+# 📍 Cursor
+
+cursor-color = #eaeaea
+cursor-style = bar
+adjust-cursor-thickness = 50%
+cursor-color = #5cf19e
+
+# 🥖 Quick Terminal
+
+keybind = global:cmd+opt+grave_accent=toggle_quick_terminal
+quick-terminal-position = bottom
+quick-terminal-animation-duration = 0.06
+quick-terminal-autohide = true
+
+# ⌨️ Keybindings
+# List all with: `ghostty +list-keybinds`
+# Useful ones:
+# - `cmd+shift+,`: to reload the config
+# - `cmd+up`: `jump_to_prompt:-1`
+# - `cmd+down`: `jump_to_prompt:1`
+
+# 🎨 Theme
+
+theme = Catppuccin Mocha
+
+
+bold-is-bright = true
+
+foreground = #ffffff
+selection-background = #4e6a78
+selection-foreground = #ffffff
+
+
+keybind = shift+enter=text:\x1b\r

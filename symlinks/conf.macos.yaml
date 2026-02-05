@@ -11,6 +11,7 @@
 - link:
     ~/.config/nvim: editors/nvim
     ~/.config/tmux: editors/tmux
+    ~/Library/Application Support/com.mitchellh.ghostty/config: editors/ghostty/config
     ~/.dotly: os/mac/.dotly
     ~/bin/bash: /opt/homebrew/bin/bash
     ~/bin/date: /opt/homebrew/bin/gdate
