@@ -1,0 +1,21 @@
+git:
+  paging:
+    colorArg: always
+    pager: delta --dark --paging=never --line-numbers --side-by-side
+
+  parseEmoji: true
+
+gui:
+  showFileTree: true
+  showRandomTip: false
+  nerdFontsVersion: "3"
+
+customCommands:
+  - key: 'd'
+    context: 'files'
+    description: 'Diff en nvim (lado a lado)'
+    command: 'nvim -c "DiffviewOpen -- {{.SelectedFile.Name}}"'
+  - key: 'D'
+    context: 'files'
+    description: 'Ver historial del archivo'
+    command: 'nvim -c "DiffviewFileHistory {{.SelectedFile.Name}}"'
