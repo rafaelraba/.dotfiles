@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JSON Tree Viewer</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #1e1e2e; color: #cdd6f4;
+    font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+    font-size: 14px; padding: 16px; line-height: 1.6;
+  }
+  #error {
+    background: #45243a; color: #f38ba8; border: 1px solid #f38ba8;
+    border-radius: 8px; padding: 12px 16px; margin-bottom: 12px;
+    display: none; white-space: pre-wrap; font-size: 13px;
+  }
+  .tree { padding-left: 0; }
+  .node { list-style: none; padding-left: 20px; }
+  .node > .row { cursor: default; padding: 2px 4px; border-radius: 4px; }
+  .node > .row:hover { background: #313244; }
+  .collapsible > .row { cursor: pointer; }
+  .collapsible > .row::before {
+    content: "\25B6"; display: inline-block; width: 16px;
+    font-size: 10px; transition: transform 0.15s; color: #6c7086;
+  }
+  .collapsible.open > .row::before { transform: rotate(90deg); }
+  .collapsible > .children { display: none; }
+  .collapsible.open > .children { display: block; }
+  .key { color: #89b4fa; }
+  .string { color: #a6e3a1; }
+  .string::before, .string::after { content: '"'; color: #6c7086; }
+  .number { color: #fab387; }
+  .boolean { color: #cba6f7; }
+  .null { color: #6c7086; font-style: italic; }
+  .bracket { color: #6c7086; font-weight: bold; }
+  .count { color: #585b70; font-size: 12px; margin-left: 4px; }
+  .index { color: #585b70; margin-right: 4px; }
+  .colon { color: #6c7086; margin: 0 4px; }
+  .comma { color: #6c7086; }
+  #status {
+    position: fixed; bottom: 8px; right: 12px;
+    font-size: 11px; color: #585b70;
+  }
+</style>
+</head>
+<body>
+<div id="error"></div>
+<ul id="root" class="tree"></ul>
+<div id="status">connecting...</div>
+<script>
+(function () {
+  const root = document.getElementById("root");
+  const errorEl = document.getElementById("error");
+  const statusEl = document.getElementById("status");
+  let lastRaw = "";
+  let expandState = {};
+
+  function saveExpand(el, path) {
+    if (!el) return;
+    const nodes = el.querySelectorAll(":scope > .node.collapsible");
+    nodes.forEach(function (n) {
+      const p = n.dataset.path;
+      if (p) {
+        expandState[p] = n.classList.contains("open");
+        const children = n.querySelector(".children");
+        if (children) saveExpand(children, p);
+      }
+    });
+  }
+
+  function isOpen(path) {
+    return expandState[path] !== undefined ? expandState[path] : true;
+  }
+
+  function countChildren(val) {
+    if (Array.isArray(val)) return val.length + " item" + (val.length !== 1 ? "s" : "");
+    if (val && typeof val === "object") {
+      var k = Object.keys(val).length;
+      return k + " key" + (k !== 1 ? "s" : "");
+    }
+    return "";
+  }
+
+  function renderValue(val, path, keyHtml, isLast) {
+    var li = document.createElement("li");
+    li.className = "node";
+    li.dataset.path = path;
+    var comma = isLast ? "" : '<span class="comma">,</span>';
+
+    if (val === null) {
+      li.innerHTML = '<div class="row">' + keyHtml + '<span class="null">null</span>' + comma + "</div>";
+    } else if (typeof val === "boolean") {
+      li.innerHTML = '<div class="row">' + keyHtml + '<span class="boolean">' + val + "</span>" + comma + "</div>";
+    } else if (typeof val === "number") {
+      li.innerHTML = '<div class="row">' + keyHtml + '<span class="number">' + val + "</span>" + comma + "</div>";
+    } else if (typeof val === "string") {
+      var escaped = val.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      li.innerHTML = '<div class="row">' + keyHtml + '<span class="string">' + escaped + "</span>" + comma + "</div>";
+    } else if (Array.isArray(val)) {
+      li.className += " collapsible" + (isOpen(path) ? " open" : "");
+      var cnt = countChildren(val);
+      li.innerHTML = '<div class="row">' + keyHtml + '<span class="bracket">[</span> <span class="count">' + cnt + "</span></div>";
+      var ul = document.createElement("ul");
+      ul.className = "children";
+      val.forEach(function (item, i) {
+        var idx = '<span class="index">' + i + ":</span> ";
+        ul.appendChild(renderValue(item, path + "[" + i + "]", idx, i === val.length - 1));
+      });
+      var close = document.createElement("li");
+      close.className = "node";
+      close.innerHTML = '<div class="row"><span class="bracket">]</span>' + comma + "</div>";
+      ul.appendChild(close);
+      li.appendChild(ul);
+      li.querySelector(".row").addEventListener("click", function () {
+        li.classList.toggle("open");
+      });
+    } else if (typeof val === "object") {
+      var keys = Object.keys(val);
+      li.className += " collapsible" + (isOpen(path) ? " open" : "");
+      var cnt2 = countChildren(val);
+      li.innerHTML = '<div class="row">' + keyHtml + '<span class="bracket">{</span> <span class="count">' + cnt2 + "</span></div>";
+      var ul2 = document.createElement("ul");
+      ul2.className = "children";
+      keys.forEach(function (k, i) {
+        var kh = '<span class="key">"' + k.replace(/&/g, "&amp;").replace(/</g, "&lt;") + '"</span><span class="colon">:</span> ';
+        ul2.appendChild(renderValue(val[k], path + "." + k, kh, i === keys.length - 1));
+      });
+      var close2 = document.createElement("li");
+      close2.className = "node";
+      close2.innerHTML = '<div class="row"><span class="bracket">}</span>' + comma + "</div>";
+      ul2.appendChild(close2);
+      li.appendChild(ul2);
+      li.querySelector(".row").addEventListener("click", function () {
+        li.classList.toggle("open");
+      });
+    }
+    return li;
+  }
+
+  function render(raw) {
+    if (raw === lastRaw) return;
+    lastRaw = raw;
+    errorEl.style.display = "none";
+    try {
+      var data = JSON.parse(raw);
+      saveExpand(root, "$");
+      root.innerHTML = "";
+      root.appendChild(renderValue(data, "$", "", true));
+      statusEl.textContent = "updated " + new Date().toLocaleTimeString();
+    } catch (e) {
+      errorEl.textContent = "JSON parse error: " + e.message;
+      errorEl.style.display = "block";
+      statusEl.textContent = "parse error";
+    }
+  }
+
+  function poll() {
+    fetch("/data.json?t=" + Date.now())
+      .then(function (r) {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.text();
+      })
+      .then(function (text) { render(text); })
+      .catch(function () { statusEl.textContent = "fetch error"; });
+  }
+
+  setInterval(poll, 300);
+  poll();
+})();
+</script>
+</body>
+</html>
