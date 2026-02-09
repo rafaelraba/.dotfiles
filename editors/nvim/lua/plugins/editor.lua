@@ -78,6 +78,8 @@ return {
       keymaps = {
         blame = "<Leader>gb", -- Keybinding to open blame window
         browse = "<Leader>go", -- Keybinding to open file/folder in git repository
+        diff = "", -- Disable to let diffview.nvim handle <leader>gd
+        diff_close = "", -- Disable to let diffview.nvim handle close
       },
     },
   },

@@ -9,6 +9,7 @@ return {
       term_colors = true,
       integrations = {
         blink_cmp = true,
+        diffview = true,
         gitsigns = true,
         treesitter = true,
         notify = true,

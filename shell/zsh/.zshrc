@@ -46,6 +46,8 @@ source "$DOTFILES_PATH/shell/zsh/key-bindings.zsh"
 # NVM y SDKMAN usan lazy loading (ver shell/functions.sh)
 export NVM_DIR="$HOME/.nvm"
 export SDKMAN_DIR="$HOME/.sdkman"
+export JAVA_HOME="$SDKMAN_DIR/candidates/java/current"
+export PATH="$JAVA_HOME/bin:$PATH"
 export PATH="$PATH:/Users/rafaba/Library/Application Support/JetBrains/Toolbox/scripts"
 export PATH="$HOME/.local/bin:$PATH"
 
