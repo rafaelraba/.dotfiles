@@ -9,6 +9,8 @@
     - ~/.hushlogin
 
 - link:
+    ~/.config/CLAUDE.md: CLAUDE.md
+    ~/.config/AGENTS.md: CLAUDE.md
     ~/.config/nvim: editors/nvim
     ~/.config/tmux: editors/tmux
     ~/.config/lazygit/config.yml: editors/lazygit/config.yml
