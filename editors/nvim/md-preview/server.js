@@ -58,6 +58,8 @@ const HTML = `<!DOCTYPE html>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/markdown-it/13.0.2/markdown-it.min.js"><\/script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"><\/script>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"><\/script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"><\/script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -554,9 +556,208 @@ body {
   opacity: 1;
   transform: translateY(0);
 }
+
+/* ── Progress Bar ── */
+.progress-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--purple));
+  z-index: 200;
+  transition: width 0.15s;
+}
+
+/* ── Copy Button ── */
+.code-wrapper {
+  position: relative;
+}
+
+.copy-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.2s;
+  z-index: 5;
+}
+
+.code-wrapper:hover .copy-btn { opacity: 1; }
+.copy-btn:hover { color: var(--text); border-color: var(--accent); }
+.copy-btn.copied { color: var(--green); border-color: var(--green); }
+
+/* ── Callouts ── */
+.callout {
+  margin: 1em 0;
+  padding: 12px 16px;
+  border-left: 4px solid;
+  border-radius: 0 var(--radius) var(--radius) 0;
+  background: var(--bg-secondary);
+}
+
+.callout p:last-child { margin-bottom: 0; }
+
+.callout-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 0.9em;
+  margin-bottom: 6px;
+}
+
+.callout-title svg { flex-shrink: 0; }
+.callout-note { border-color: var(--accent); }
+.callout-note .callout-title { color: var(--accent); }
+.callout-tip { border-color: var(--green); }
+.callout-tip .callout-title { color: var(--green); }
+.callout-important { border-color: var(--purple); }
+.callout-important .callout-title { color: var(--purple); }
+.callout-warning { border-color: var(--orange); }
+.callout-warning .callout-title { color: var(--orange); }
+.callout-caution { border-color: var(--red); }
+.callout-caution .callout-title { color: var(--red); }
+
+/* ── Frontmatter Card ── */
+.frontmatter-card {
+  margin-bottom: 2em;
+  padding: 16px 20px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.frontmatter-card .fm-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.frontmatter-card .fm-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+
+.frontmatter-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.frontmatter-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+/* ── Heading Anchors ── */
+.heading-anchor {
+  display: inline-block;
+  margin-left: 8px;
+  color: var(--text-secondary);
+  opacity: 0;
+  transition: opacity 0.2s;
+  text-decoration: none;
+  font-size: 0.75em;
+}
+
+.content h1:hover .heading-anchor,
+.content h2:hover .heading-anchor,
+.content h3:hover .heading-anchor,
+.content h4:hover .heading-anchor { opacity: 1; }
+.heading-anchor:hover { color: var(--accent); }
+
+/* ── Back to Top ── */
+.back-to-top {
+  position: fixed;
+  bottom: 32px;
+  right: 32px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: all 0.3s;
+  z-index: 80;
+}
+
+.back-to-top.visible { opacity: 1; transform: translateY(0); }
+.back-to-top:hover { color: var(--accent); border-color: var(--accent); }
+
+/* ── Image Lightbox ── */
+.content img {
+  max-width: 100%;
+  border-radius: var(--radius);
+  cursor: zoom-in;
+  transition: transform 0.2s;
+}
+
+.content img:hover { transform: scale(1.01); }
+
+/* ── Details / Summary ── */
+.content details {
+  margin: 1em 0;
+  padding: 12px 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.content summary {
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 0;
+  color: var(--accent);
+  user-select: none;
+}
+
+.content summary:hover { color: var(--accent-hover); }
+.content details[open] summary { margin-bottom: 8px; }
+
+/* ── Reading Time ── */
+.reading-time {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+/* ── KaTeX ── */
+.katex-display { margin: 1.2em 0; overflow-x: auto; }
+
+/* ── Print ── */
+@media print {
+  .topbar, .back-to-top, .progress-bar, .toast,
+  .mermaid-expand, .copy-btn, .heading-anchor,
+  #toc-panel { display: none !important; }
+  .content { max-width: 100%; padding: 0; }
+  body { background: white; color: black; }
+  .content pre { box-shadow: none; border: 1px solid #ddd; }
+}
 </style>
 </head>
 <body>
+<div class="progress-bar" id="progress-bar"></div>
 <div class="topbar">
   <div class="topbar-title">
     <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor">
@@ -564,6 +765,7 @@ body {
     </svg>
     <span>${fileName}</span>
     <div class="live-dot" title="Live reload active"></div>
+    <span class="reading-time" id="reading-time"></span>
   </div>
   <div class="topbar-actions">
     <button class="btn" id="theme-toggle" title="Toggle theme">
@@ -583,6 +785,11 @@ body {
 
 <div class="content" id="content"></div>
 <div class="toast" id="toast">Updated</div>
+<button class="back-to-top" id="back-to-top" title="Back to top">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="18 15 12 9 6 15"/>
+  </svg>
+</button>
 
 <div id="toc-panel" style="
   position: fixed; top: 53px; right: -320px; width: 300px; bottom: 0;
@@ -649,7 +856,11 @@ md.renderer.rules.fence = (tokens, idx, options, env, slf) => {
       '</button>' +
     '</div>';
   }
-  return defaultFence(tokens, idx, options, env, slf);
+  var rendered = defaultFence(tokens, idx, options, env, slf);
+  return '<div class="code-wrapper">' +
+    '<button class="copy-btn" onclick="copyCode(this)">Copy</button>' +
+    rendered +
+  '</div>';
 };
 
 function openMermaidModal(wrapper) {
@@ -773,10 +984,171 @@ function openMermaidModal(wrapper) {
   });
 }
 
+function stripFrontmatter(text) {
+  return text.replace(/^---\\n[\\s\\S]*?\\n---\\n?/, "");
+}
+
+function parseFrontmatter(text) {
+  var match = text.match(/^---\\n([\\s\\S]*?)\\n---/);
+  if (!match) return "";
+  var lines = match[1].split("\\n");
+  var name = "", desc = "", tools = [];
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i];
+    if (line.indexOf("name:") === 0) name = line.slice(5).trim();
+    else if (line.indexOf("description:") === 0) desc = line.slice(12).trim();
+    else if (line.indexOf("allowed-tools:") === 0) tools = line.slice(14).trim().split(",").map(function(t) { return t.trim(); });
+  }
+  if (!name && !desc) return "";
+  var html = '<div class="frontmatter-card">';
+  if (name) html += '<div class="fm-title">' + name + '</div>';
+  if (desc) html += '<div class="fm-desc">' + desc + '</div>';
+  if (tools.length) {
+    html += '<div class="frontmatter-tags">';
+    for (var j = 0; j < tools.length; j++) {
+      html += '<span class="frontmatter-tag">' + tools[j] + '</span>';
+    }
+    html += '</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+var CALLOUT_TYPES = {
+  NOTE:      { label: "Note",      color: "note",      icon: '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75zM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2z"/></svg>' },
+  TIP:       { label: "Tip",       color: "tip",       icon: '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863.5 8 .5s5.5 1.81 5.5 4.75c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75zM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75zM5.75 12a.75.75 0 0 0 0 1.5h4.5a.75.75 0 0 0 0-1.5h-4.5z"/></svg>' },
+  IMPORTANT: { label: "Important", color: "important", icon: '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v9.5A1.75 1.75 0 0 1 14.25 13H8.06l-2.573 2.573A1.458 1.458 0 0 1 3 14.543V13H1.75A1.75 1.75 0 0 1 0 11.25Zm1.75-.25a.25.25 0 0 0-.25.25v9.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h6.5a.25.25 0 0 0 .25-.25v-9.5a.25.25 0 0 0-.25-.25Zm7 2.25v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 9a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"/></svg>' },
+  WARNING:   { label: "Warning",   color: "warning",   icon: '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"/></svg>' },
+  CAUTION:   { label: "Caution",   color: "caution",   icon: '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M4.47.22A.749.749 0 0 1 5 0h6c.199 0 .389.079.53.22l4.25 4.25c.141.14.22.331.22.53v6a.749.749 0 0 1-.22.53l-4.25 4.25A.749.749 0 0 1 11 16H5a.749.749 0 0 1-.53-.22L.22 11.53A.749.749 0 0 1 0 11V5c0-.199.079-.389.22-.53Zm.84 1.28L1.5 5.31v5.38l3.81 3.81h5.38l3.81-3.81V5.31L10.69 1.5ZM8 4a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 8 4zm0 8a1 1 0 1 1 0-2 1 1 0 0 1 0 2z"/></svg>' }
+};
+
+function renderCallouts(html) {
+  var re = new RegExp('<blockquote>[\\\\s]*<p>\\\\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\\\\][\\\\s]*([\\\\s\\\\S]*?)<\\\\/blockquote>', 'gi');
+  return html.replace(re, function(match, type, content) {
+    var cfg = CALLOUT_TYPES[type.toUpperCase()];
+    if (!cfg) return match;
+    return '<div class="callout callout-' + cfg.color + '">' +
+      '<div class="callout-title">' + cfg.icon + ' ' + cfg.label + '</div>' +
+      '<p>' + content + '</div>';
+  });
+}
+
+function renderKaTeX(html) {
+  html = html.replace(/\\$\\$([\\s\\S]*?)\\$\\$/g, function(m, tex) {
+    try { return katex.renderToString(tex.trim(), { displayMode: true, throwOnError: false }); }
+    catch(e) { return m; }
+  });
+  html = html.replace(/\\$([^$\\n]+?)\\$/g, function(m, tex) {
+    try { return katex.renderToString(tex.trim(), { displayMode: false, throwOnError: false }); }
+    catch(e) { return m; }
+  });
+  return html;
+}
+
+function copyCode(btn) {
+  var pre = btn.parentElement.querySelector("pre code");
+  if (!pre) return;
+  navigator.clipboard.writeText(pre.textContent).then(function() {
+    btn.textContent = "Copied!";
+    btn.classList.add("copied");
+    setTimeout(function() {
+      btn.textContent = "Copy";
+      btn.classList.remove("copied");
+    }, 2000);
+  });
+}
+
+function addHeadingAnchors() {
+  var headings = document.querySelectorAll(".content h1, .content h2, .content h3, .content h4");
+  headings.forEach(function(h) {
+    if (!h.id || h.querySelector(".heading-anchor")) return;
+    var a = document.createElement("a");
+    a.className = "heading-anchor";
+    a.href = "#" + h.id;
+    a.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M7.775 3.275a.75.75 0 0 0 1.06 1.06l1.25-1.25a2 2 0 1 1 2.83 2.83l-2.5 2.5a2 2 0 0 1-2.83 0 .75.75 0 0 0-1.06 1.06 3.5 3.5 0 0 0 4.95 0l2.5-2.5a3.5 3.5 0 0 0-4.95-4.95l-1.25 1.25zm-4.69 9.64a2 2 0 0 1 0-2.83l2.5-2.5a2 2 0 0 1 2.83 0 .75.75 0 0 0 1.06-1.06 3.5 3.5 0 0 0-4.95 0l-2.5 2.5a3.5 3.5 0 0 0 4.95 4.95l1.25-1.25a.75.75 0 0 0-1.06-1.06l-1.25 1.25a2 2 0 0 1-2.83 0z"/></svg>';
+    a.title = "Copy link";
+    a.onclick = function(e) {
+      e.preventDefault();
+      navigator.clipboard.writeText(window.location.origin + window.location.pathname + "#" + h.id);
+      var toast = document.getElementById("toast");
+      toast.textContent = "Link copied";
+      toast.classList.add("show");
+      setTimeout(function() { toast.classList.remove("show"); toast.textContent = "Updated"; }, 1500);
+    };
+    h.appendChild(a);
+  });
+}
+
+function setupImageLightbox() {
+  document.querySelectorAll(".content img").forEach(function(img) {
+    if (img.dataset.lightbox) return;
+    img.dataset.lightbox = "true";
+    img.onclick = function() {
+      var overlay = document.createElement("div");
+      overlay.className = "mermaid-overlay";
+      overlay.innerHTML =
+        '<div class="mermaid-overlay-content" style="display:flex;align-items:center;justify-content:center;padding:24px">' +
+          '<img src="' + img.src + '" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:10px;cursor:default">' +
+          '<button class="mermaid-overlay-close" title="Close (Esc)">' +
+            '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+          '</button>' +
+        '</div>';
+      var close = function() {
+        overlay.classList.remove("visible");
+        setTimeout(function() { overlay.remove(); }, 250);
+        document.removeEventListener("keydown", onKey);
+      };
+      var onKey = function(e) { if (e.key === "Escape") close(); };
+      overlay.addEventListener("click", function(e) { if (e.target === overlay) close(); });
+      overlay.querySelector(".mermaid-overlay-close").onclick = close;
+      document.addEventListener("keydown", onKey);
+      document.body.appendChild(overlay);
+      requestAnimationFrame(function() { overlay.classList.add("visible"); });
+    };
+  });
+}
+
+function calculateReadingTime(text) {
+  var words = text.replace(/[#*\`~\\[\\]()>_-]/g, " ").split(/\\s+/).filter(function(w) { return w.length > 0; }).length;
+  var minutes = Math.max(1, Math.ceil(words / 200));
+  document.getElementById("reading-time").textContent = "~" + minutes + " min read";
+}
+
+function setupScrollSpy() {
+  var links = document.querySelectorAll("#toc-list a");
+  if (!links.length) return;
+  var headings = [];
+  links.forEach(function(a) {
+    var id = a.getAttribute("href").slice(1);
+    var el = document.getElementById(id);
+    if (el) headings.push({ el: el, link: a });
+  });
+  var onScroll = function() {
+    var scrollY = window.scrollY + 100;
+    var current = null;
+    for (var i = 0; i < headings.length; i++) {
+      if (headings[i].el.offsetTop <= scrollY) current = headings[i];
+    }
+    links.forEach(function(a) { a.style.color = ""; a.style.borderLeftColor = "transparent"; });
+    if (current) {
+      current.link.style.color = "var(--accent)";
+      current.link.style.borderLeftColor = "var(--accent)";
+    }
+  };
+  window.addEventListener("scroll", onScroll, { passive: true });
+  onScroll();
+}
+
 function renderContent(text) {
-  const scrollY = window.scrollY;
-  const el = document.getElementById("content");
-  el.innerHTML = md.render(text);
+  var scrollY = window.scrollY;
+  var el = document.getElementById("content");
+
+  var rendered = md.render(stripFrontmatter(text));
+  rendered = renderCallouts(rendered);
+  rendered = renderKaTeX(rendered);
+
+  var frontmatterHtml = parseFrontmatter(text);
+  el.innerHTML = frontmatterHtml + rendered;
 
   mermaid.initialize({
     startOnLoad: false,
@@ -785,16 +1157,20 @@ function renderContent(text) {
     fontFamily: "Inter, sans-serif",
   });
 
-  document.querySelectorAll(".mermaid").forEach((node) => {
-    const id = node.id;
+  document.querySelectorAll(".mermaid").forEach(function(node) {
+    var id = node.id;
     try {
-      mermaid.render(id + "-svg", node.textContent.trim()).then(({ svg }) => {
-        node.innerHTML = svg;
+      mermaid.render(id + "-svg", node.textContent.trim()).then(function(result) {
+        node.innerHTML = result.svg;
       });
-    } catch {}
+    } catch(e) {}
   });
 
   buildTOC();
+  addHeadingAnchors();
+  setupScrollSpy();
+  setupImageLightbox();
+  calculateReadingTime(text);
   window.scrollTo(0, scrollY);
 }
 
@@ -862,6 +1238,21 @@ evtSource.onmessage = (e) => {
 };
 
 fetch("/raw").then(r => r.text()).then(renderContent);
+
+window.addEventListener("scroll", function() {
+  var scrollTop = window.scrollY;
+  var docHeight = document.documentElement.scrollHeight - window.innerHeight;
+  var progress = docHeight > 0 ? (scrollTop / docHeight) * 100 : 0;
+  document.getElementById("progress-bar").style.width = progress + "%";
+
+  var btn = document.getElementById("back-to-top");
+  if (scrollTop > 400) btn.classList.add("visible");
+  else btn.classList.remove("visible");
+}, { passive: true });
+
+document.getElementById("back-to-top").onclick = function() {
+  window.scrollTo({ top: 0, behavior: "smooth" });
+};
 <\/script>
 </body>
 </html>`;
