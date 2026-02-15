@@ -22,10 +22,10 @@
 	hunk-header-file-style = "#cdd6f4"
 	hunk-header-line-number-style = bold "#f9e2af"
 	hunk-header-style = file line-number syntax
-	minus-emph-style = bold syntax
-	minus-style = syntax
-	plus-emph-style = bold syntax
-	plus-style = syntax
+	minus-style = syntax "#443244"
+	minus-emph-style = syntax "#5c3d5c"
+	plus-style = syntax "#364143"
+	plus-emph-style = syntax "#4a5a5b"
 	map-styles = bold purple => syntax "#5b4e74", bold blue => syntax "#445375", bold cyan => syntax "#446170", bold yellow => syntax "#6b635b"
 	width = variable
 	line-numbers = true

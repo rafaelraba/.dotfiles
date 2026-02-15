@@ -8,7 +8,7 @@ gui:
   mainPanelSplitMode: vertical
   showFileTree: true
   showRandomTip: false
-  showBottomLine: false
+  showBottomLine: true
   showPanelJumps: false
   nerdFontsVersion: "3"
   authorColors:
@@ -51,12 +51,3 @@ gui:
       - "#cdd6f4"
     searchingActiveBorderColor:
       - "#f9e2af"
-customCommands:
-  - key: 'd'
-    context: 'files'
-    description: 'Diff en nvim (lado a lado)'
-    command: 'nvim -c "DiffviewOpen -- {{.SelectedFile.Name}}"'
-  - key: 'D'
-    context: 'files'
-    description: 'Ver historial del archivo'
-    command: 'nvim -c "DiffviewFileHistory {{.SelectedFile.Name}}"'
