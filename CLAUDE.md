@@ -54,7 +54,8 @@ Dotfiles personales de Rafael Raba, gestionados con [dotly](https://github.com/C
 - **Lenguajes configurados:** TypeScript, Go, Java, Tailwind CSS
 - **Formateador:** Prettier para JS/TS/CSS/HTML
 - **Tema:** Catppuccin Mocha (transparente), Tokyo Night como alternativa
-- **Plugins destacados:** oil.nvim (file manager), diffview.nvim, goto-preview, toggleterm, zen-mode, snacks.nvim (dashboard)
+- **Plugins destacados:** oil.nvim (file manager), diffview.nvim, goto-preview, toggleterm, zen-mode, snacks.nvim (dashboard), kulala.nvim (REST client)
+- **REST client:** kulala.nvim — archivos `.http` (formato IntelliJ), variables desde `http-client.env.json`, keymaps bajo `<leader>R`
 - **Formato Lua:** stylua (2 espacios, 120 columnas)
 
 ## Tmux
