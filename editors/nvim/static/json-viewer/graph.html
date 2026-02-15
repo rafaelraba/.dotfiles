@@ -27,10 +27,10 @@
 </style>
 </head>
 <body>
-<iframe id="frame" src="https://jsoncrack.com/widget"></iframe>
+<iframe id="frame" src="http://localhost:9999/widget"></iframe>
 <div id="fallback">
   <p>Could not load JSON Crack widget.</p>
-  <p><a href="https://jsoncrack.com/editor" target="_blank">Open JSON Crack in a new tab</a></p>
+  <p><a href="http://localhost:9999/editor" target="_blank">Open JSON Crack in a new tab</a></p>
   <button id="copy-btn">Copy JSON to clipboard</button>
 </div>
 <div id="status">loading widget...</div>
@@ -48,12 +48,12 @@
     if (!ready) {
       frame.style.display = "none";
       fallback.style.display = "block";
-      statusEl.textContent = "widget timeout";
+      statusEl.textContent = "widget timeout — el container puede estar iniciando";
     }
-  }, 5000);
+  }, 15000);
 
   window.addEventListener("message", function (e) {
-    if (e.origin.includes("jsoncrack.com")) {
+    if (e.origin.includes("localhost")) {
       ready = true;
       clearTimeout(timeout);
       statusEl.textContent = "widget ready";

@@ -1,27 +1,47 @@
 return {
-  -- Configuración adicional de nvim-jdtls (Java LSP)
-  -- El extra de LazyVim para Java se importa en lazy.lua
   {
     "mfussenegger/nvim-jdtls",
     opts = {
-      -- Configuración del servidor JDTLS
-      -- jdtls = {
-      --   -- Puedes agregar configuraciones específicas aquí
-      --   -- Por ejemplo, para Spring Boot:
-      --   settings = {
-      --     java = {
-      --       configuration = {
-      --         runtimes = {
-      --           -- Especifica las versiones de Java instaladas
-      --           -- {
-      --           --   name = "JavaSE-17",
-      --           --   path = "/path/to/jdk-17",
-      --           -- },
-      --         },
-      --       },
-      --     },
-      --   },
-      -- },
+      settings = {
+        java = {
+          imports = {
+            gradle = { wrapper = { checksums = {} } },
+            order = { "java", "javax", "com", "org" },
+            favoriteStaticMembers = {
+              "org.junit.jupiter.api.Assertions.*",
+              "org.mockito.Mockito.*",
+              "org.mockito.ArgumentMatchers.*",
+              "org.mockito.BDDMockito.*",
+              "org.hamcrest.Matchers.*",
+              "org.hamcrest.CoreMatchers.*",
+              "org.assertj.core.api.Assertions.*",
+            },
+            starThreshold = 9999,
+            staticStarThreshold = 9999,
+          },
+          completion = {
+            favoriteStaticMembers = {
+              "org.junit.jupiter.api.Assertions.*",
+              "org.mockito.Mockito.*",
+              "org.mockito.ArgumentMatchers.*",
+              "org.mockito.BDDMockito.*",
+              "org.hamcrest.Matchers.*",
+              "org.hamcrest.CoreMatchers.*",
+              "org.assertj.core.api.Assertions.*",
+            },
+          },
+          sources = {
+            organizeImports = {
+              starThreshold = 9999,
+              staticStarThreshold = 9999,
+            },
+          },
+        },
+      },
+      jdtls = function(config)
+        table.insert(config.cmd, "--jvm-arg=-Xmx4G")
+        return config
+      end,
     },
   },
 }

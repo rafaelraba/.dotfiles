@@ -25,6 +25,40 @@ local function json_fold_suffix(lnum, endLnum)
   return "  [ " .. count .. (count == 1 and " item" or " items") .. " ]"
 end
 
+local JSONCRACK_PORT = 9999
+local COMPOSE_FILE = vim.fn.stdpath("config") .. "/static/json-viewer/docker-compose.yml"
+
+local function ensure_jsoncrack()
+  local running = vim.trim(
+    vim.fn.system("docker compose -f " .. COMPOSE_FILE .. " ps --status running -q 2>/dev/null")
+  )
+  if running ~= "" then return end
+
+  if vim.fn.executable("docker") ~= 1 then
+    vim.notify("Docker no encontrado en PATH", vim.log.levels.ERROR)
+    return
+  end
+
+  local docker_ok = vim.fn.system("docker info 2>/dev/null")
+  if vim.v.shell_error ~= 0 then
+    vim.notify("Docker no disponible. Inicia Docker Desktop o Colima.", vim.log.levels.ERROR)
+    return
+  end
+
+  vim.notify("Iniciando JSON Crack container...", vim.log.levels.INFO)
+  vim.fn.jobstart({ "docker", "compose", "-f", COMPOSE_FILE, "up", "-d" }, {
+    on_exit = function(_, code)
+      vim.schedule(function()
+        if code == 0 then
+          vim.notify("JSON Crack listo en localhost:" .. JSONCRACK_PORT, vim.log.levels.INFO)
+        else
+          vim.notify("Error iniciando JSON Crack. Ejecuta: docker compose -f " .. COMPOSE_FILE .. " up -d --build", vim.log.levels.ERROR)
+        end
+      end)
+    end,
+  })
+end
+
 local json_viewer = { server_job = nil, port = nil, tmp_dir = nil, update_autocmd = nil, debounce_timer = nil }
 
 local function write_json(buf)
@@ -96,9 +130,7 @@ return {
         end
         return { "lsp", "indent" }
       end,
-      close_fold_kinds_for_ft = {
-        json = { "array", "object" },
-      },
+      close_fold_kinds_for_ft = {},
       fold_virt_text_handler = function(virtText, lnum, endLnum, width, truncate)
         local newVirtText = {}
         local suffix_text = ""
@@ -207,6 +239,7 @@ return {
             open_viewer(ev.buf, "tree.html")
           end, vim.tbl_extend("force", opts, { desc = "JSON Tree viewer (live)" }))
           vim.keymap.set("n", "<leader>jc", function()
+            ensure_jsoncrack()
             open_viewer(ev.buf, "graph.html")
           end, vim.tbl_extend("force", opts, { desc = "JSON Crack graph (live)" }))
           vim.keymap.set("n", "<leader>jx", function()
