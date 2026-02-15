@@ -2,8 +2,8 @@
 # Uncomment for debuf with `zprof`
 # zmodload zsh/zprof
 
-# Auto-start tmux (nueva sesión por ventana)
-if command -v tmux &> /dev/null && [ -z "$TMUX" ]; then
+# Auto-start tmux (excluye terminales de JetBrains)
+if command -v tmux &> /dev/null && [ -z "$TMUX" ] && [[ "$TERMINAL_EMULATOR" != "JetBrains-JediTerm" ]]; then
   tmux new -s "$(date +%s)"
 fi
 
