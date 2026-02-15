@@ -2,9 +2,9 @@
 	name = Rafael Raba
 	email = rafaelrb40@gmail.com
 [core]
-	pager = delta
+	pager = delta --dark
 [interactive]
-	diffFilter = delta --color-only
+	diffFilter = delta --dark --color-only
 [delta]
 	features = catppuccin-mocha
 	side-by-side = true
@@ -12,20 +12,42 @@
 [delta "catppuccin-mocha"]
 	dark = true
 	syntax-theme = Catppuccin Mocha
-	file-decoration-style = "\"#6c7086\" ul"
-	file-style = "#cdd6f4"
-	hunk-header-decoration-style = "\"#6c7086\" ul"
-	hunk-header-file-style = bold
-	hunk-header-line-number-style = bold "#a6adc8"
+	file-decoration-style = "#89b4fa" ul
+	file-style = bold "#89b4fa"
+	file-added-label = [+]
+	file-modified-label = [~]
+	file-removed-label = [-]
+	file-renamed-label = [→]
+	hunk-header-decoration-style = "#45475a" box
+	hunk-header-file-style = "#cdd6f4"
+	hunk-header-line-number-style = bold "#f9e2af"
 	hunk-header-style = file line-number syntax
-	minus-emph-style = bold syntax "#694559"
-	minus-style = syntax "#493447"
-	plus-emph-style = bold syntax "#4e6356"
-	plus-style = syntax "#394545"
+	minus-emph-style = bold syntax
+	minus-style = syntax
+	plus-emph-style = bold syntax
+	plus-style = syntax
 	map-styles = bold purple => syntax "#5b4e74", bold blue => syntax "#445375", bold cyan => syntax "#446170", bold yellow => syntax "#6b635b"
 	width = variable
 	line-numbers = true
 	line-numbers-left-format = "{nm:>4} "
 	line-numbers-right-format = "│ {np:>4} "
-	line-numbers-left-style = "\"#6c7086\""
-	line-numbers-right-style = "\"#6c7086\""
+	line-numbers-left-style = "#eba0ac"
+	line-numbers-right-style = "#94e2d5"
+	line-numbers-minus-style = "#eba0ac"
+	line-numbers-plus-style = "#94e2d5"
+	line-numbers-zero-style = "#6c7086"
+	inline-hint-style = syntax "#45475a"
+	whitespace-error-style = "#f38ba8" reverse
+	blame-format = "{author:<15} {timestamp:>15} {commit:<8} │ "
+	blame-palette = "#1e1e2e" "#181825" "#11111b" "#232336" "#2a2a40"
+	blame-separator-format = "│{n:^4}│"
+	blame-separator-style = "#45475a"
+	blame-timestamp-format = %Y-%m-%d
+	commit-decoration-style = bold "#f5c2e7" box ul
+	commit-style = bold "#f5c2e7"
+	merge-conflict-begin-symbol = ▼
+	merge-conflict-end-symbol = ▲
+	merge-conflict-ours-diff-header-style = bold "#f9e2af"
+	merge-conflict-ours-diff-header-decoration-style = "#f9e2af" box
+	merge-conflict-theirs-diff-header-style = bold "#89b4fa"
+	merge-conflict-theirs-diff-header-decoration-style = "#89b4fa" box

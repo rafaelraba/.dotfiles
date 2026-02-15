@@ -1,15 +1,56 @@
 git:
-  paging:
-    colorArg: always
-    pager: delta --dark --paging=never --line-numbers --side-by-side
-
+  pagers:
+    - colorArg: always
+      pager: delta --dark --features catppuccin-mocha --paging=never
   parseEmoji: true
-
 gui:
+  border: rounded
+  mainPanelSplitMode: vertical
   showFileTree: true
   showRandomTip: false
+  showBottomLine: false
+  showPanelJumps: false
   nerdFontsVersion: "3"
-
+  authorColors:
+    "*": "#cdd6f4"
+  branchColors:
+    "main": "#f38ba8"
+    "master": "#f38ba8"
+    "develop": "#a6e3a1"
+    "dev": "#a6e3a1"
+  spinner:
+    frames:
+      - "⠋"
+      - "⠙"
+      - "⠹"
+      - "⠸"
+      - "⠼"
+      - "⠴"
+      - "⠦"
+      - "⠧"
+      - "⠇"
+      - "⠏"
+    rate: 80
+  theme:
+    activeBorderColor:
+      - "#a6e3a1"
+      - bold
+    inactiveBorderColor:
+      - "#a6adc8"
+    optionsTextColor:
+      - "#89b4fa"
+    selectedLineBgColor:
+      - "#313244"
+    cherryPickedCommitBgColor:
+      - "#45475a"
+    cherryPickedCommitFgColor:
+      - "#a6e3a1"
+    unstagedChangesColor:
+      - "#f38ba8"
+    defaultFgColor:
+      - "#cdd6f4"
+    searchingActiveBorderColor:
+      - "#f9e2af"
 customCommands:
   - key: 'd'
     context: 'files'
