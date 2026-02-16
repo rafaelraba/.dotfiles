@@ -48,8 +48,8 @@ export NVM_DIR="$HOME/.nvm"
 export SDKMAN_DIR="$HOME/.sdkman"
 export JAVA_HOME="$SDKMAN_DIR/candidates/java/current"
 export PATH="$JAVA_HOME/bin:$PATH"
-export PATH="$PATH:/Users/rafaba/Library/Application Support/JetBrains/Toolbox/scripts"
+export PATH="$PATH:$HOME/Library/Application Support/JetBrains/Toolbox/scripts"
 export PATH="$HOME/.local/bin:$PATH"
 
 # opencode
-export PATH=/Users/rafaba/.opencode/bin:$PATH
+export PATH=$HOME/.opencode/bin:$PATH
