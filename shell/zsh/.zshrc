@@ -4,7 +4,7 @@
 
 # Auto-start tmux (excluye terminales de JetBrains)
 if command -v tmux &> /dev/null && [ -z "$TMUX" ] && [[ "$TERMINAL_EMULATOR" != "JetBrains-JediTerm" ]]; then
-  tmux new -s "$(date +%s)"
+  tmux new -A -s "$(basename "$PWD")"
 fi
 
 # ZSH Ops

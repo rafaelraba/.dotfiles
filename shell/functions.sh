@@ -38,3 +38,15 @@ function sdk() { lazy_load_sdk && sdk "$@"; }
 function java() { lazy_load_sdk && java "$@"; }
 function gradle() { lazy_load_sdk && gradle "$@"; }
 function mvn() { lazy_load_sdk && mvn "$@"; }
+
+# Renombrar sesión tmux al cambiar de directorio (solo zsh)
+if [[ -n "$ZSH_VERSION" ]]; then
+  function _tmux_rename_session_on_cd() {
+    if [[ -n "$TMUX" ]]; then
+      local session=$(tmux display-message -p '#S')
+      [[ "$session" == _* ]] && return
+      tmux rename-session "$(basename "$PWD")"
+    fi
+  }
+  chpwd_functions+=(_tmux_rename_session_on_cd)
+fi
