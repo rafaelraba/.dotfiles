@@ -1,10 +1,15 @@
+# OPENSPEC:START
+# OpenSpec shell completions configuration
+fpath=("/Users/rafaba/.zsh/completions" $fpath)
+# OPENSPEC:END
+
 #!/usr/bin/env zsh
 # Uncomment for debuf with `zprof`
 # zmodload zsh/zprof
 
 # Auto-start tmux (excluye terminales de JetBrains)
 if command -v tmux &> /dev/null && [ -z "$TMUX" ] && [[ "$TERMINAL_EMULATOR" != "JetBrains-JediTerm" ]]; then
-  tmux new -A -s "$(basename "$PWD")"
+  exec tmux new-session -A -s "$(basename "$PWD")"
 fi
 
 # ZSH Ops

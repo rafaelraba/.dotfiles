@@ -60,7 +60,7 @@ return {
     requires = { "nvim-tree/nvim-web-devicons", opt = true },
     opts = {
       options = {
-        theme = "catppuccin",
+        theme = "catppuccin-mocha",
         icons_enabled = true,
       },
       sections = {

@@ -18,7 +18,6 @@ window-colorspace = display-p3
 mouse-scroll-multiplier = 2
 mouse-hide-while-typing = true
 window-step-resize = true
-window-close-when-empty = true
 unfocused-split-opacity = 0.70
 
 # 📝 Font

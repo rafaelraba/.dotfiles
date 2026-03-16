@@ -1034,15 +1034,19 @@ function renderCallouts(html) {
 }
 
 function renderKaTeX(html) {
-  html = html.replace(/\\$\\$([\\s\\S]*?)\\$\\$/g, function(m, tex) {
-    try { return katex.renderToString(tex.trim(), { displayMode: true, throwOnError: false }); }
-    catch(e) { return m; }
-  });
-  html = html.replace(/\\$([^$\\n]+?)\\$/g, function(m, tex) {
-    try { return katex.renderToString(tex.trim(), { displayMode: false, throwOnError: false }); }
-    catch(e) { return m; }
-  });
-  return html;
+  var parts = html.split(/(<pre[^>]*>[\\s\\S]*?<\\/pre>)/gi);
+  for (var i = 0; i < parts.length; i++) {
+    if (parts[i].match(/^<pre/i)) continue;
+    parts[i] = parts[i].replace(/\\$\\$([\\s\\S]*?)\\$\\$/g, function(m, tex) {
+      try { return katex.renderToString(tex.trim(), { displayMode: true, throwOnError: false }); }
+      catch(e) { return m; }
+    });
+    parts[i] = parts[i].replace(/\\$([^$\\n]+?)\\$/g, function(m, tex) {
+      try { return katex.renderToString(tex.trim(), { displayMode: false, throwOnError: false }); }
+      catch(e) { return m; }
+    });
+  }
+  return parts.join("");
 }
 
 function copyCode(btn) {
