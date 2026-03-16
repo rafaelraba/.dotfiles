@@ -45,7 +45,14 @@ if [[ -n "$ZSH_VERSION" ]]; then
     if [[ -n "$TMUX" ]]; then
       local session=$(tmux display-message -p '#S')
       [[ "$session" == _* ]] && return
-      tmux rename-session "$(basename "$PWD")"
+      local dir_name="$(basename "$PWD")"
+      dir_name="${dir_name#.}"  # quitar punto inicial (.claude → claude)
+      # Evitar colisión: tmux convierte .foo → _foo, así que verificar ambos
+      if [[ "$session" != "$dir_name" ]]; then
+        tmux has-session -t "=$dir_name" 2>/dev/null && return
+        tmux has-session -t "=_$dir_name" 2>/dev/null && return
+      fi
+      tmux rename-session "$dir_name"
     fi
   }
   chpwd_functions+=(_tmux_rename_session_on_cd)
