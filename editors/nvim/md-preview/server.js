@@ -1,7 +1,6 @@
 import { createServer } from "node:http";
 import { readFileSync, watchFile, unwatchFile, existsSync } from "node:fs";
 import { resolve, basename, dirname, join, extname } from "node:path";
-import { execSync } from "node:child_process";
 
 const filePath = resolve(process.argv[2] || "");
 if (!filePath || !filePath.endsWith(".md")) {
@@ -1304,9 +1303,6 @@ server.listen(PORT, () => {
   const url = `http://localhost:${PORT}`;
   console.log(`\x1b[32m✓\x1b[0m Serving \x1b[1m${fileName}\x1b[0m at \x1b[36m${url}\x1b[0m`);
   console.log(`\x1b[90m  Live reload active · Ctrl+C to stop\x1b[0m`);
-  try {
-    execSync(`open "${url}"`);
-  } catch {}
 });
 
 process.on("SIGINT", () => {
