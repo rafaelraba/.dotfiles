@@ -1,7 +1,7 @@
 git:
   pagers:
     - colorArg: always
-      pager: delta --dark --features catppuccin-mocha --paging=never
+      pager: delta --dark --features kanagawa-dragon --paging=never
   parseEmoji: true
 gui:
   border: rounded
@@ -12,12 +12,12 @@ gui:
   showPanelJumps: false
   nerdFontsVersion: "3"
   authorColors:
-    "*": "#cdd6f4"
+    "*": "#c5c9c5"
   branchColors:
-    "main": "#f38ba8"
-    "master": "#f38ba8"
-    "develop": "#a6e3a1"
-    "dev": "#a6e3a1"
+    "main": "#c4746e"
+    "master": "#c4746e"
+    "develop": "#8a9a7b"
+    "dev": "#8a9a7b"
   spinner:
     frames:
       - "⠋"
@@ -33,21 +33,21 @@ gui:
     rate: 80
   theme:
     activeBorderColor:
-      - "#a6e3a1"
+      - "#8a9a7b"
       - bold
     inactiveBorderColor:
-      - "#a6adc8"
+      - "#a6a69c"
     optionsTextColor:
-      - "#89b4fa"
+      - "#8ba4b0"
     selectedLineBgColor:
-      - "#313244"
+      - "#282727"
     cherryPickedCommitBgColor:
-      - "#45475a"
+      - "#393836"
     cherryPickedCommitFgColor:
-      - "#a6e3a1"
+      - "#8a9a7b"
     unstagedChangesColor:
-      - "#f38ba8"
+      - "#c4746e"
     defaultFgColor:
-      - "#cdd6f4"
+      - "#c5c9c5"
     searchingActiveBorderColor:
-      - "#f9e2af"
+      - "#c4b28a"

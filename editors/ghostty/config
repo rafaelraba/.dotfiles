@@ -8,8 +8,8 @@ shell-integration = zsh
 # 🪟 Window
 
 macos-titlebar-style = hidden
-background-opacity = 0.91
-background-blur-radius = 20
+background-opacity = 1.0
+background-blur-radius = 0
 window-save-state = always
 window-height = 14
 window-width = 180
@@ -18,14 +18,15 @@ window-colorspace = display-p3
 mouse-scroll-multiplier = 2
 mouse-hide-while-typing = true
 window-step-resize = true
-unfocused-split-opacity = 0.70
+unfocused-split-opacity = 1.0
+macos-option-as-alt = true
 
 # 📝 Font
 
-font-size = 15
+font-size = 17.5
 font-thicken = true
-adjust-cell-height = 30%
-font-family = JetbrainsMono Nerd Font Medium
+adjust-cell-height = 20%
+font-family = IosevkaTerm Nerd Font Mono
 
 # 📋 Clipboard
 
@@ -56,14 +57,10 @@ quick-terminal-autohide = true
 
 # 🎨 Theme
 
-theme = Catppuccin Mocha
+theme = Kanagawa Dragon
 
 
 bold-is-bright = true
-
-foreground = #ffffff
-selection-background = #4e6a78
-selection-foreground = #ffffff
 
 
 keybind = shift+enter=text:\x1b\r
