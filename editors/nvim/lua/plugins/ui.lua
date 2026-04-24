@@ -57,10 +57,10 @@ return {
   {
     "nvim-lualine/lualine.nvim",
     event = "VeryLazy",
-    requires = { "nvim-tree/nvim-web-devicons", opt = true },
+    dependencies = { "nvim-tree/nvim-web-devicons" },
     opts = {
       options = {
-        theme = "catppuccin-mocha",
+        theme = "auto",
         icons_enabled = true,
       },
       sections = {
