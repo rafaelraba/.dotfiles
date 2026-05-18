@@ -5,6 +5,9 @@ return {
       window = {
         width = 50,
       },
+      filesystem = {
+        use_libuv_file_watcher = true,
+      },
     },
   },
   {

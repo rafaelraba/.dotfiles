@@ -8,7 +8,7 @@ fpath=("/Users/rafaba/.zsh/completions" $fpath)
 # zmodload zsh/zprof
 
 # Auto-start tmux (excluye terminales de JetBrains)
-if command -v tmux &> /dev/null && [ -z "$TMUX" ] && [[ "$TERMINAL_EMULATOR" != "JetBrains-JediTerm" ]]; then
+if command -v tmux &> /dev/null && [ -z "$TMUX" ] && [[ "$TERMINAL_EMULATOR" != "JetBrains-JediTerm" ]] && [[ "$TERM" != "dumb" ]] && [[ -z "$VSCODE_RESOLVING_ENVIRONMENT" ]]; then
   exec tmux new-session -A -s "$(basename "$PWD")"
 fi
 
@@ -58,3 +58,6 @@ export PATH="$HOME/.local/bin:$PATH"
 
 # opencode
 export PATH=$HOME/.opencode/bin:$PATH
+
+# Added by Antigravity
+export PATH="/Users/rafaba/.antigravity/antigravity/bin:$PATH"

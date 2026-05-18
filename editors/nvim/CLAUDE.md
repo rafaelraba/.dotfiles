@@ -87,8 +87,10 @@ Configuracion basada en **LazyVim** con **lazy.nvim** como plugin manager. Tema 
 - `<leader>-` - Oil en directorio del archivo actual
 - `<leader>fb` - Find Buffers (snacks picker)
 
-### REST Client (`<leader>R`)
-- `s` send | `a` send all | `b` scratchpad | `i` inspect | `c` copy cURL | `e` env | `n/p` next/prev | `t` toggle response
+### REST Client (`<leader>r`)
+- `s` send | `a` send all | `r` replay last | `b` scratchpad | `o` open UI | `q` close | `i` inspect | `c` copy cURL | `C` paste from cURL | `e` env | `j` cookies jar | `g` GraphQL schema | `u` auth config
+- En archivo `.http`: `<CR>` también envía la request bajo el cursor
+- Dentro de la ventana de respuesta: `H` headers | `B` body | `A` ambos | `V` verbose | `S` stats | `R` report | `F` filter | `]` / `[` next/prev response | `X` clear history | `?` help
 
 ### JSON (buffer-local, `<leader>j`)
 - `d` delete node | `f` fold toggle | `F` fold all | `U` unfold all | `y` yank value | `t` tree viewer | `c` graph viewer | `x` stop viewer

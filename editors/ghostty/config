@@ -19,7 +19,7 @@ mouse-scroll-multiplier = 2
 mouse-hide-while-typing = true
 window-step-resize = true
 unfocused-split-opacity = 1.0
-macos-option-as-alt = true
+macos-option-as-alt = left
 
 # 📝 Font
 

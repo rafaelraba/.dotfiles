@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Wrapper que captura el estado de sesiones ANTES de abrir el popup.
+# Esto evita inconsistencias de tmux dentro del contexto de display-popup (tmux ≥3.6).
+#
+# Llamado desde el binding de tmux:
+#   bind s ... { run-shell -t = "~/.dotfiles/scripts/session-picker-wrapper.sh '#S' '#{pane_current_path}'" }
+set -euo pipefail
+
+CURRENT="${1:-}"
+PANEDIR="${2:-$HOME}"
+
+# Archivo temporal donde guardamos la lista de sesiones pre-capturada.
+# NO se borra aquí: lo limpia session-picker.sh al terminar.
+SPFILE=$(mktemp /tmp/tmux-sp-XXXXXX)
+
+# Capturar sesiones desde el contexto real del cliente (fuera de cualquier popup)
+tmux list-sessions \
+    -f '#{?#{m:_*,#{session_name}},0,1}' \
+    -F $'#{session_name}\t#{session_windows}\t#{session_attached}\t#{pane_current_path}' \
+    2>/dev/null > "$SPFILE"
+
+# Si el archivo quedó vacío, algo falló — mostrar error mínimo y salir
+if [[ ! -s "$SPFILE" ]]; then
+    tmux display-message "No sessions found"
+    rm -f "$SPFILE"
+    exit 1
+fi
+
+# Abrir el popup con los datos pre-capturados.
+# session-picker.sh lee de $SPFILE y lo borra al terminar.
+exec tmux display-popup \
+    -d "$PANEDIR" \
+    -w 78 -h 12 -b rounded \
+    -s "bg=#0d0c0c,fg=#c5c9c5" \
+    -S "fg=#8ba4b0" \
+    -T " sessions " \
+    -E "~/.dotfiles/scripts/session-picker.sh '$CURRENT' '$SPFILE' ; rm -f '$SPFILE'"
