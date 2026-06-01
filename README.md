@@ -1,29 +1,35 @@
 <h1 align="center">
-  .dotfiles created using <a href="https://github.com/CodelyTV/dotly">🌚 dotly</a>
+  .dotfiles creados con <a href="https://github.com/CodelyTV/dotly">🌚 dotly</a>
 </h1>
 
-## Restore your Dotfiles manually
+## 🚀 Restauración en máquina nueva
 
-* Install git
-* Clone your dotfiles repository `git clone [your repository of dotfiles] $HOME/.dotfiles`
-* Go to your dotfiles folder `cd $HOME/.dotfiles`
-* Install git submodules `git submodule update --init --recursive modules/dotly`
-* Install your dotfiles `DOTFILES_PATH="$HOME/.dotfiles" DOTLY_PATH="$DOTFILES_PATH/modules/dotly" "$DOTLY_PATH/bin/dot" self install`
-* Restart your terminal
-* Import your packages `dot package import`
-
-## Restore your Dotfiles with script
-
-Using wget
 ```bash
-bash <(wget -qO- https://raw.githubusercontent.com/CodelyTV/dotly/HEAD/restorer)
+# 1. Clonar el repo
+git clone git@github.com:rafaelraba/.dotfiles.git ~/.dotfiles
+
+# 2. Un comando para todo
+cd ~/.dotfiles && ./restore.sh
 ```
 
-Using curl
+Esto instala automáticamente:
+- 🔗 Symlinks de todas las configuraciones (shell, nvim, tmux, ghostty, git, starship)
+- 🔌 TPM + plugins de tmux
+- 🍺 Paquetes de Homebrew (Brewfile)
+
+Después reiniciá tu terminal y listo.
+
+### Requisitos previos
+- Git + SSH key configurada en GitHub
+- Homebrew (si estás en macOS, instalalo desde [brew.sh](https://brew.sh))
+
+### Manual (paso a paso)
+Si preferís hacerlo manual:
 ```bash
-bash <(curl -s https://raw.githubusercontent.com/CodelyTV/dotly/HEAD/restorer)
+git clone git@github.com:rafaelraba/.dotfiles.git ~/.dotfiles
+cd ~/.dotfiles
+git submodule update --init --recursive modules/dotly
+DOTFILES_PATH="$HOME/.dotfiles" DOTLY_PATH="$DOTFILES_PATH/modules/dotly" "$DOTLY_PATH/bin/dot" self install
+git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
+brew bundle --file="$HOME/.dotfiles/os/mac/brew/Brewfile"
 ```
-
-You need to know your GitHub username, repository and install ssh key if your repository is private.
-
-It also supports other git repos, but you need to know your git repository url.
