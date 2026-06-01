@@ -7,7 +7,7 @@ return {
         -- LSP Servers
         "jdtls", -- Java
         "gopls", -- Go
-        "typescript-language-server", -- JavaScript/TypeScript/React
+        "vtsls", -- JavaScript/TypeScript/React (LazyVim TypeScript extra default)
         "tailwindcss-language-server", -- Tailwind CSS
         "html-lsp", -- HTML
         "css-lsp", -- CSS

@@ -1,11 +1,11 @@
 return {
   -- Configuración adicional de TypeScript LSP
-  -- El extra de LazyVim para TypeScript se importa en lazy.lua
+  -- El extra de LazyVim para TypeScript se importa en lazy.lua y usa vtsls por defecto
   {
     "neovim/nvim-lspconfig",
     opts = {
       servers = {
-        tsserver = {
+        vtsls = {
           -- Configuraciones para TypeScript Server
           settings = {
             typescript = {

@@ -163,6 +163,23 @@ return {
     opts = {
       notifier = {},
       image = {},
+      dim = {
+        scope = {
+          min_size = 3,
+          max_size = 12,
+          siblings = false,
+          treesitter = {
+            blocks = {
+              enabled = true,
+              "function_declaration",
+              "function_definition",
+              "method_declaration",
+              "method_definition",
+              "arrow_function",
+            },
+          },
+        },
+      },
       picker = {
         exclude = {
           ".git",
