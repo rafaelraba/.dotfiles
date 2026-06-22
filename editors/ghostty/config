@@ -55,6 +55,16 @@ quick-terminal-autohide = true
 # - `cmd+up`: `jump_to_prompt:-1`
 # - `cmd+down`: `jump_to_prompt:1`
 
+# Bloquea tabs accidentales que re-disparan el auto-start de tmux
+keybind = cmd+t=ignore
+
+# Tmux session navigation: Option + arrows
+keybind = alt+arrow_left=text:\x01H
+keybind = alt+arrow_right=text:\x01L
+
+# Tmux bottom runner panel: Option + Enter
+keybind = alt+enter=text:\x01\r
+
 # 🎨 Theme
 
 theme = Kanagawa Dragon
