@@ -1,28 +1,24 @@
+# Taps
+# Core apps/utilities + window-management custom tap.
 tap "denisidoro/tools"
 tap "felixkratz/formulae"
 tap "gentleman-programming/tap"
 tap "nikitabobko/tap"
 tap "oven-sh/bun"
+
+# Core dev CLI
 brew "bash"
 brew "bat"
-brew "cloudflared"
 brew "coreutils"
 brew "eza"
 brew "fd"
 brew "findutils"
 brew "fzf"
-brew "gemini-cli"
 brew "gh"
 brew "git-delta"
-brew "glow"
 brew "gnu-sed"
-brew "go"
-brew "python@3.14"
-brew "grip"
-brew "hyperfine"
 brew "lazygit"
 brew "make"
-brew "mas"
 brew "neovim"
 brew "pnpm"
 brew "ripgrep"
@@ -32,16 +28,42 @@ brew "tmux"
 brew "yazi"
 brew "zoxide"
 brew "zsh"
+
+# Languages / runtimes
+brew "go"
+brew "python@3.13"
+
+# Tapped formulae
 brew "denisidoro/tools/docpars"
 brew "felixkratz/formulae/sketchybar"
 brew "gentleman-programming/tap/engram"
 brew "gentleman-programming/tap/gentle-ai"
 brew "gentleman-programming/tap/gga"
 brew "oven-sh/bun/bun"
+
+# Utilities
+brew "cloudflared"
+brew "gemini-cli"
+brew "glow"
+brew "grip"
+brew "hyperfine"
+brew "mas"
+
+# macOS apps
 cask "nikitabobko/tap/aerospace"
-cask "font-iosevka-term-nerd-font"
+cask "ghostty"
+cask "hammerspoon"
 cask "obsidian"
+cask "raycast"
+
+# Fonts
+cask "font-iosevka-term-nerd-font"
+cask "font-jetbrains-mono-nerd-font"
+
+# Mac App Store
 mas "Microsoft Excel", id: 462058435
+
+# Language-specific packages
 go "golang.org/x/tools/gopls"
 uv "claude-monitor"
 npm "@earendil-works/pi-coding-agent"
