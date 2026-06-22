@@ -1,23 +1,27 @@
 git:
   pagers:
     - colorArg: always
-      pager: delta --dark --features kanagawa-dragon --paging=never
+      pager: delta --dark --features lazygit-gruvbox --paging=never
   parseEmoji: true
 gui:
-  border: rounded
-  mainPanelSplitMode: vertical
+  border: bold
+  mainPanelSplitMode: flexible
+  sidePanelWidth: 0.28
+  expandFocusedSidePanel: true
+  enlargedSideViewLocation: left
   showFileTree: true
   showRandomTip: false
-  showBottomLine: true
-  showPanelJumps: false
+  showCommandLog: false
+  showBottomLine: false
+  showPanelJumps: true
   nerdFontsVersion: "3"
   authorColors:
-    "*": "#c5c9c5"
+    "*": "default"
   branchColors:
-    "main": "#c4746e"
-    "master": "#c4746e"
-    "develop": "#8a9a7b"
-    "dev": "#8a9a7b"
+    "main": "red"
+    "master": "red"
+    "develop": "green"
+    "dev": "green"
   spinner:
     frames:
       - "⠋"
@@ -33,21 +37,28 @@ gui:
     rate: 80
   theme:
     activeBorderColor:
-      - "#8a9a7b"
+      - '#fabd2f'
       - bold
     inactiveBorderColor:
-      - "#a6a69c"
+      - '#665c54'
     optionsTextColor:
-      - "#8ba4b0"
+      - '#83a598'
     selectedLineBgColor:
-      - "#282727"
+      - '#3c3836'
+    inactiveViewSelectedLineBgColor:
+      - '#282828'
     cherryPickedCommitBgColor:
-      - "#393836"
+      - '#504945'
     cherryPickedCommitFgColor:
-      - "#8a9a7b"
+      - '#b8bb26'
+    markedBaseCommitBgColor:
+      - '#504945'
+    markedBaseCommitFgColor:
+      - '#fabd2f'
     unstagedChangesColor:
-      - "#c4746e"
+      - '#fb4934'
     defaultFgColor:
-      - "#c5c9c5"
+      - '#ebdbb2'
     searchingActiveBorderColor:
-      - "#c4b28a"
+      - '#fabd2f'
+      - bold

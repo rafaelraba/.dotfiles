@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Selector compacto de sesiones con paleta Kanagawa Dragon/dark.
-# Uso: ~/.dotfiles/scripts/session-picker.sh [current_session] [sessions_file]
+# Compact session picker using the Gruvbox Material dark hard palette.
+# Usage: ~/.dotfiles/scripts/session-picker.sh [current_session] [sessions_file]
 #
 #   current_session : nombre de la sesión actual (opcional, se detecta automáticamente)
 #   sessions_file   : archivo con output pre-capturado de `tmux list-sessions`
@@ -14,21 +14,22 @@ set -euo pipefail
 current="${1:-$(tmux display-message -p '#S' 2>/dev/null || true)}"
 sessions_file="${2:-}"
 
-# Kanagawa dark / dragon-black.
-BG="#0d0c0c"
-BG_ACTIVE="#181616"
-FG="#c5c9c5"
-FG_ACTIVE="#e6c384"
-SUBTLE="#737c73"
-GREEN="#87a987"
-BLUE="#8ba4b0"
-VIOLET="#a292a3"
-RED="#c4746e"
-DIM="#5a5a5a"
+# Gruvbox Material dark hard.
+BG="#1d2021"
+BG_ACTIVE="#282828"
+FG="#d4be98"
+FG_ACTIVE="#ddc7a1"
+SUBTLE="#928374"
+GREEN="#a9b665"
+BLUE="#7daea3"
+VIOLET="#d3869b"
+RED="#ea6962"
+ORANGE="#d8a657"
+DIM="#665c54"
 
 FZF_COLORS="bg:${BG},bg+:${BG_ACTIVE},gutter:${BG},fg:${FG},fg+:${FG_ACTIVE}"
 FZF_COLORS="${FZF_COLORS},hl:${GREEN},hl+:${GREEN},border:${GREEN},label:${VIOLET}"
-FZF_COLORS="${FZF_COLORS},header:${SUBTLE},pointer:${GREEN},marker:${FG_ACTIVE},prompt:${GREEN}"
+FZF_COLORS="${FZF_COLORS},header:${SUBTLE},pointer:${ORANGE},marker:${FG_ACTIVE},prompt:${GREEN}"
 FZF_COLORS="${FZF_COLORS},spinner:${BLUE},info:${SUBTLE},query:${FG_ACTIVE},separator:${SUBTLE},scrollbar:${SUBTLE}"
 
 session_rows() {
@@ -98,32 +99,32 @@ session_rows() {
 
 		if ((attached > 0)); then
 			state="online"
-			state_color="135;169;135"
+			state_color="169;182;101"
 		else
 			state="idle"
-			state_color="115;124;115"
+			state_color="146;131;116"
 		fi
 
 		if ((attached > 0)); then
 			# Online: warm, alive, bold
-			name_color="1;38;2;230;195;132"
-			win_color="38;2;139;164;176"
-			path_color="38;2;115;124;115"
+			name_color="1;38;2;221;199;161"
+			win_color="38;2;125;174;163"
+			path_color="38;2;146;131;116"
 		else
 			# Idle: dimmed, readable gray
-			name_color="38;2;140;140;140"
-			win_color="38;2;110;110;110"
-			path_color="38;2;100;100;100"
+			name_color="38;2;146;131;116"
+			win_color="38;2;102;92;84"
+			path_color="38;2;80;73;69"
 		fi
 
 		if [[ "$name" == "$current" ]]; then
-			# Current session gets a dot marker
-			marker="● "
+			# Current session gets a subtle warm marker.
+			marker=$'\033[38;2;216;166;87m●\033[0m '
 		else
 			marker="  "
 		fi
 
-		printf '%s\t%s\033[%sm%-18.18s\033[0m  \033[%sm%2sw\033[0m  \033[%sm%-10.10s\033[0m  \033[38;2;%sm%s\033[0m\n' \
+		printf '%s\t%s\033[%sm%-20.20s\033[0m  \033[%sm󰓩 %2s\033[0m  \033[%sm󰉋 %-13.13s\033[0m  \033[38;2;%sm● %s\033[0m\n' \
 			"$name" "$marker" "$name_color" "$name" "$win_color" "$window_count" "$path_color" "$project" "$state_color" "$state"
 	done
 }
@@ -135,14 +136,14 @@ selected="$({ session_rows || true; } |
 		--no-border \
 		--delimiter=$'\t' \
 		--with-nth=2.. \
-		--prompt='  sessions › ' \
+		--prompt='  switch › ' \
 		--pointer='❯ ' \
 		--marker='• ' \
 		--ellipsis='…' \
 		--cycle \
 		--scroll-off=1 \
 		--no-info \
-		--header='  ↑/↓ navigate  ↵ switch  esc cancel' \
+		--header='  name                  windows  project        state     ↑/↓ navigate  ↵ switch  esc cancel' \
 		--tiebreak=index \
 		--no-sort \
 		--color="${FZF_COLORS}" |

@@ -13,8 +13,8 @@ tmux list-sessions -f '#{?#{m:_*,#{session_name}},0,1}' -F '#{session_name}' 2>/
 	fi
 
 	if [ "$session" = "$current" ]; then
-		echo -n "#[bg=#7aa2f7,fg=#1a1b26,bold] $session #[bg=#1a1b26,fg=#7aa2f7]#[bg=#1a1b26,fg=#a9b1d6]"
+		echo -n "#[bg=#83a598,fg=#1d2021,bold] $session #[bg=#1d2021,fg=#83a598]#[bg=#1d2021,fg=#d4be98]"
 	else
-		echo -n "#[fg=#565f89] $session "
+		echo -n "#[fg=#665c54] $session "
 	fi
 done

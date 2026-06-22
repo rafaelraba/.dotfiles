@@ -192,6 +192,47 @@ return {
           filename_bonus = true,
         },
       },
+      lazygit = {
+        config = {
+          gui = {
+            border = "bold",
+            mainPanelSplitMode = "flexible",
+            sidePanelWidth = 0.28,
+            expandFocusedSidePanel = true,
+            enlargedSideViewLocation = "left",
+            showCommandLog = false,
+            showBottomLine = false,
+            showPanelJumps = true,
+            nerdFontsVersion = "3",
+          },
+        },
+        theme = {
+          [241] = { fg = "Comment" },
+          activeBorderColor = { fg = "DiagnosticWarn", bold = true },
+          inactiveBorderColor = { fg = "Comment" },
+          searchingActiveBorderColor = { fg = "DiagnosticWarn", bold = true },
+          optionsTextColor = { fg = "Function" },
+          selectedLineBgColor = { bg = "CursorLine" },
+          inactiveViewSelectedLineBgColor = { bg = "NormalFloat" },
+          cherryPickedCommitBgColor = { bg = "Visual" },
+          cherryPickedCommitFgColor = { fg = "String" },
+          markedBaseCommitBgColor = { bg = "Visual" },
+          markedBaseCommitFgColor = { fg = "DiagnosticWarn" },
+          unstagedChangesColor = { fg = "DiagnosticError" },
+          defaultFgColor = { fg = "Normal" },
+        },
+        win = {
+          style = "lazygit",
+          wo = {
+            winhighlight = table.concat({
+              "Normal:LazyGitNormal",
+              "NormalFloat:LazyGitNormal",
+              "FloatBorder:LazyGitBorder",
+              "WinBar:LazyGitWinBar",
+            }, ","),
+          },
+        },
+      },
       dashboard = {
         sections = {
           { section = "header" },

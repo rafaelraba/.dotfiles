@@ -30,8 +30,8 @@ fi
 # session-picker.sh lee de $SPFILE y lo borra al terminar.
 exec tmux display-popup \
     -d "$PANEDIR" \
-    -w 78 -h 12 -b rounded \
-    -s "bg=#0d0c0c,fg=#c5c9c5" \
-    -S "fg=#8ba4b0" \
-    -T " sessions " \
+    -w 84 -h 13 -b rounded \
+    -s "bg=#1d2021,fg=#d4be98" \
+    -S "fg=#a9b665" \
+    -T "  sessions " \
     -E "~/.dotfiles/scripts/session-picker.sh '$CURRENT' '$SPFILE' ; rm -f '$SPFILE'"

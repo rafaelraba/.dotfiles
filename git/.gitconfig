@@ -52,3 +52,28 @@
 	merge-conflict-ours-diff-header-decoration-style = "#c4b28a" box
 	merge-conflict-theirs-diff-header-style = bold "#8ba4b0"
 	merge-conflict-theirs-diff-header-decoration-style = "#8ba4b0" box
+
+[delta "lazygit-gruvbox"]
+	dark = true
+	syntax-theme = gruvbox-dark
+	side-by-side = false
+	line-numbers = true
+	width = variable
+	file-style = bold "#d8a657"
+	file-decoration-style = "#504945" ul
+	hunk-header-style = file line-number syntax
+	hunk-header-file-style = bold "#d4be98"
+	hunk-header-line-number-style = bold "#d8a657"
+	hunk-header-decoration-style = "#3c3836" box
+	minus-style = syntax "#3c1f1e"
+	minus-emph-style = syntax bold "#5a2a28"
+	plus-style = syntax "#26351f"
+	plus-emph-style = syntax bold "#3d4f2a"
+	line-numbers-left-style = "#ea6962"
+	line-numbers-right-style = "#a9b665"
+	line-numbers-minus-style = "#ea6962"
+	line-numbers-plus-style = "#a9b665"
+	line-numbers-zero-style = "#665c54"
+	inline-hint-style = syntax "#3c3836"
+	whitespace-error-style = "#ea6962" reverse
+	map-styles = bold purple => syntax "#3d3139", bold blue => syntax "#293b3a", bold cyan => syntax "#293f3c", bold yellow => syntax "#43371f"
