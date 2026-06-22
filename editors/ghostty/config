@@ -55,7 +55,7 @@ quick-terminal-autohide = true
 # - `cmd+up`: `jump_to_prompt:-1`
 # - `cmd+down`: `jump_to_prompt:1`
 
-# Bloquea tabs accidentales que re-disparan el auto-start de tmux
+# Block accidental tabs that re-trigger tmux auto-start.
 keybind = cmd+t=ignore
 
 # Tmux session navigation: Option + arrows
