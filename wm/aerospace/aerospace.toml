@@ -1,19 +1,8 @@
-# Minimal AeroSpace config: safe tiling + SketchyBar workspace numbers.
-# Does not require disabling SIP.
+# Minimal AeroSpace-only config.
+# No Hammerspoon, no layout scripts, no external workspace hooks.
 
 start-at-login = true
 
-# Reload SketchyBar after AeroSpace starts so the workspace items can query AeroSpace.
-after-startup-command = ['exec-and-forget /bin/bash -lc "sketchybar --reload"']
-
-# Notify SketchyBar when the focused AeroSpace workspace changes.
-exec-on-workspace-change = [
-  '/bin/bash',
-  '-lc',
-  'sketchybar --trigger aerospace_workspace_change AEROSPACE_FOCUSED_WORKSPACE=$AEROSPACE_FOCUSED_WORKSPACE',
-]
-
-# Basic layout behavior.
 enable-normalization-flatten-containers = false
 enable-normalization-opposite-orientation-for-nested-containers = true
 accordion-padding = 30
@@ -49,7 +38,9 @@ cmd-alt-shift-j = 'move down'
 cmd-alt-shift-k = 'move up'
 cmd-alt-shift-l = 'move right'
 
-# Resize is owned by Hammerspoon because layouts are coordinate-based.
+# Resize focused window in the AeroSpace tree.
+cmd-alt-minus = 'resize width -100'
+cmd-alt-equal = 'resize width +100'
 
 # Layout and split controls.
 cmd-alt-slash = 'layout tiles horizontal vertical'
@@ -58,7 +49,7 @@ cmd-alt-f = 'layout floating tiling'
 cmd-alt-v = 'split vertical'
 cmd-alt-b = 'split horizontal'
 
-# Fullscreen (maximize) focused window within Aerospace.
+# Fullscreen focused window within AeroSpace.
 cmd-alt-ctrl-semicolon = 'fullscreen --no-outer-gaps'
 
 # Monitor focus and window movement.
@@ -76,7 +67,6 @@ cmd-alt-ctrl-shift-k = 'move-node-to-monitor up --focus-follows-window'
 cmd-alt-ctrl-shift-l = 'move-node-to-monitor right --focus-follows-window'
 
 # Workspaces.
-# Monitor 1: 1-4. Monitor 2: 5-8.
 cmd-alt-1 = 'workspace 1'
 cmd-alt-2 = 'workspace 2'
 cmd-alt-3 = 'workspace 3'
@@ -97,8 +87,4 @@ cmd-alt-shift-7 = 'move-node-to-workspace 7 --focus-follows-window'
 cmd-alt-shift-8 = 'move-node-to-workspace 8 --focus-follows-window'
 
 # Maintenance.
-cmd-alt-enter = 'exec-and-forget /bin/bash -lc "$HOME/.dotfiles/scripts/wm/layout-columns.sh"'
-cmd-alt-c = 'exec-and-forget /bin/bash -lc "$HOME/.dotfiles/scripts/wm/layout-columns.sh"'
-cmd-alt-d = 'exec-and-forget /bin/bash -lc "$HOME/.dotfiles/scripts/wm/layout-stack-right.sh"'
-cmd-alt-shift-b = 'exec-and-forget /bin/bash -lc "$HOME/.dotfiles/wm/aerospace/toggle-sketchybar-gap.sh"'
 cmd-alt-shift-r = 'reload-config'
