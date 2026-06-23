@@ -64,6 +64,10 @@ System Settings → Privacy & Security → Accessibility
 
 Sin esto no funcionan los atajos de window management.
 
+## 📚 Documentación
+
+- [AeroSpace + Hammerspoon window management](doc/window-management.md): restore path, ownership model, hotkeys, verification, and troubleshooting.
+
 ## ✅ Checklist de verificación
 
 - [ ] `test/scripts/wm-invariants.sh` pasa todas las comprobaciones de propiedad entre AeroSpace y Hammerspoon.
