@@ -6,6 +6,29 @@ local workspaceLayoutRestore = require("modules.workspace_layout_restore")
 
 local hyper = constants.hyper
 local shiftHyper = { "cmd", "alt", "shift" }
+local pendingScriptTasks = {}
+
+local function runScript(scriptPath)
+  if not hs.fs.attributes(scriptPath) then
+    hs.printf("Script not found: %s", scriptPath)
+    return
+  end
+
+  local task
+  task = hs.task.new("/bin/zsh", function(exitCode, _, stderr)
+    pendingScriptTasks[task] = nil
+    if exitCode ~= 0 then
+      hs.printf("Script failed: %s exit=%s %s", scriptPath, tostring(exitCode), tostring(stderr or ""))
+    end
+  end, { scriptPath })
+
+  if not task or not task:start() then
+    hs.printf("Script could not start: %s", scriptPath)
+    return
+  end
+
+  pendingScriptTasks[task] = true
+end
 
 local directions = {
   h = "left",
@@ -36,6 +59,14 @@ end)
 
 hs.hotkey.bind(hyper, "m", function()
   resize.centerFocusedWindow()
+end)
+
+hs.hotkey.bind(hyper, "f", function()
+  resize.maximizeFocusedWindow()
+end)
+
+hs.hotkey.bind(shiftHyper, "b", function()
+  runScript((os.getenv("HOME") or "") .. "/.dotfiles/wm/aerospace/toggle-sketchybar-gap.sh")
 end)
 
 -- Layout presets. The previous "/" bindings registered but did not fire,

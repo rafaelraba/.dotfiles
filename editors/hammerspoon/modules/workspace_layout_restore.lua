@@ -11,6 +11,7 @@ local knownLayouts = {
 }
 
 local statePath = constants.workspaceLayoutStatePath
+local autoRestore = constants.workspaceLayoutAutoRestore == true
 local pollInterval = constants.workspaceLayoutPollInterval
 local restoreDebounce = constants.workspaceLayoutRestoreDebounce
 
@@ -289,7 +290,9 @@ local function poll()
 
     currentWorkspace = workspace
     generation = generation + 1
-    scheduleRestore(workspace)
+    if autoRestore then
+      scheduleRestore(workspace)
+    end
   end)
 end
 
@@ -327,6 +330,7 @@ function M.status()
     currentWorkspace = currentWorkspace,
     generation = generation,
     restoring = restoring,
+    autoRestore = autoRestore,
     workspaceQueryInFlight = workspaceQueryInFlight,
     statePath = statePath,
   }

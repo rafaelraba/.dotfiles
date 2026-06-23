@@ -19,6 +19,7 @@ M.edgeSnapThreshold = 12
 M.stackRightMaxWindows = 3
 
 -- Workspace layout restore behavior.
+M.workspaceLayoutAutoRestore = false
 M.workspaceLayoutPollInterval = 0.20
 M.workspaceLayoutRestoreDebounce = 0.10
 M.aerospaceCliTimeout = 1.0

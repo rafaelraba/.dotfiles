@@ -34,6 +34,11 @@ end
 local function newHarness(options)
   options = options or {}
   resetModules()
+  local productionConstants = require("modules.constants")
+  local workspaceLayoutAutoRestore = productionConstants.workspaceLayoutAutoRestore
+  if options.workspaceLayoutAutoRestore ~= nil then
+    workspaceLayoutAutoRestore = options.workspaceLayoutAutoRestore
+  end
 
   local harness = {
     afterTimers = {},
@@ -52,10 +57,13 @@ local function newHarness(options)
     frame = function()
       return { x = 0, y = 0, w = 1000, h = 800 }
     end,
-    visibleFrame = function()
-      return { x = 0, y = 24, w = 1000, h = 776 }
-    end,
   }
+
+  if options.mainScreenVisibleFrame ~= false then
+    mainScreen.visibleFrame = function()
+      return { x = 0, y = 24, w = 1000, h = 776 }
+    end
+  end
 
   local otherScreen = {
     frame = function()
@@ -219,6 +227,7 @@ local function newHarness(options)
     leftRatio = 0.62,
     centerMainRatio = 0.65,
     stackRightMaxWindows = 3,
+    workspaceLayoutAutoRestore = workspaceLayoutAutoRestore,
     workspaceLayoutPollInterval = 0.5,
     workspaceLayoutRestoreDebounce = 0.3,
     aerospaceCliTimeout = 1,
@@ -245,8 +254,34 @@ test("workspace polling uses async task, timeout, and a single in-flight query",
   assertFalse(restore.status().workspaceQueryInFlight, "timeout clears in-flight state")
 end)
 
+test("workspace polling does not auto-restore by production default", function()
+  local harness = newHarness({
+    state = {
+      schemaVersion = 1,
+      workspaces = {
+        dev = { layout = "columns", windowIds = { 901, 902 } },
+      },
+    },
+  })
+  harness:addWindow(901)
+  harness:addWindow(902)
+  harness:setVisible({ 901, 902 })
+  harness.focusedWindowId = 901
+
+  local restore = require("modules.workspace_layout_restore")
+  restore.start()
+  harness:completeTask(1, 0, "dev\n")
+
+  assertEquals(restore.status().currentWorkspace, "dev", "current workspace is still tracked")
+  assertFalse(restore.status().autoRestore, "auto-restore is disabled")
+  assertEquals(#harness.afterTimers, 1, "only the workspace query timeout timer exists")
+  assertEquals(harness.frames[901], nil, "saved layout is not auto-applied")
+  assertEquals(harness.frames[902], nil, "saved layout is not auto-applied")
+end)
+
 test("restore uses only current visible current-screen windows and ignores stale IDs", function()
   local harness = newHarness({
+    workspaceLayoutAutoRestore = true,
     state = {
       schemaVersion = 1,
       workspaces = {
@@ -275,6 +310,7 @@ end)
 
 test("restore targets focused non-main screen instead of main screen", function()
   local harness = newHarness({
+    workspaceLayoutAutoRestore = true,
     state = {
       schemaVersion = 1,
       workspaces = {
@@ -322,6 +358,7 @@ end)
 
 test("restore save suppression remains until async layout completion", function()
   local harness = newHarness({
+    workspaceLayoutAutoRestore = true,
     state = {
       schemaVersion = 1,
       workspaces = {
@@ -351,6 +388,7 @@ end)
 
 test("center-main restore lays focused window in the large center column", function()
   local harness = newHarness({
+    workspaceLayoutAutoRestore = true,
     state = {
       schemaVersion = 1,
       workspaces = {
@@ -456,10 +494,45 @@ test("center focused window floats before applying frame", function()
   assertEquals(harness.frames[401], nil, "frame waits for async float completion")
 
   harness:completeTask(1, 0, "")
-  assertEquals(harness.frames[401].x, 300, "centered x is applied")
-  assertEquals(harness.frames[401].y, 262, "centered y is applied")
-  assertEquals(harness.frames[401].w, 400, "width is preserved")
-  assertEquals(harness.frames[401].h, 300, "height is preserved")
+  assertEquals(harness.frames[401].x, 150, "centered x is applied")
+  assertEquals(harness.frames[401].y, 63, "centered y is applied")
+  assertEquals(harness.frames[401].w, 700, "width uses 70 percent of visible width")
+  assertEquals(harness.frames[401].h, 698, "height uses 90 percent of visible height")
+end)
+
+test("maximize focused window floats before applying visible frame", function()
+  local harness = newHarness()
+  harness:addWindow(402, { frame = { x = 100, y = 100, w = 400, h = 300 } })
+  harness.focusedWindowId = 402
+  local resize = require("modules.resize")
+
+  resize.maximizeFocusedWindow()
+
+  assertEquals(#harness.tasks, 1, "maximize starts one float task")
+  assertEquals(harness.tasks[1].args[1], "layout", "maximize uses aerospace layout command")
+  assertEquals(harness.tasks[1].args[3], "402", "maximize floats the focused window")
+  assertEquals(harness.frames[402], nil, "frame waits for async float completion")
+
+  harness:completeTask(1, 0, "")
+  assertEquals(harness.frames[402].x, 0, "visible frame x is applied")
+  assertEquals(harness.frames[402].y, 24, "visible frame y is applied")
+  assertEquals(harness.frames[402].w, 1000, "visible frame width is applied")
+  assertEquals(harness.frames[402].h, 776, "visible frame height is applied")
+end)
+
+test("maximize focused window falls back to screen frame without visibleFrame", function()
+  local harness = newHarness({ mainScreenVisibleFrame = false })
+  harness:addWindow(403, { frame = { x = 100, y = 100, w = 400, h = 300 } })
+  harness.focusedWindowId = 403
+  local resize = require("modules.resize")
+
+  resize.maximizeFocusedWindow()
+  harness:completeTask(1, 0, "")
+
+  assertEquals(harness.frames[403].x, 0, "screen frame x fallback is applied")
+  assertEquals(harness.frames[403].y, 0, "screen frame y fallback is applied")
+  assertEquals(harness.frames[403].w, 1000, "screen frame width fallback is applied")
+  assertEquals(harness.frames[403].h, 800, "screen frame height fallback is applied")
 end)
 
 test("aerospace PATH candidate resolves without spawning a process", function()

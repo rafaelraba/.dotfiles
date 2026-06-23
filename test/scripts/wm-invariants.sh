@@ -170,6 +170,63 @@ check_hammerspoon_aerospace_usage() {
   fi
 }
 
+check_hammerspoon_sketchybar_toggle_binding() {
+  local file="$1"
+  local line binding_block="" in_binding=0
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" =~ hs\.hotkey\.bind\(shiftHyper,[[:space:]]*[\"\']b[\"\'] ]]; then
+      in_binding=1
+    fi
+
+    if [[ "$in_binding" -eq 1 ]]; then
+      binding_block+="$line"$'\n'
+      if [[ "$line" =~ ^[[:space:]]*end\) ]]; then
+        break
+      fi
+    fi
+  done < "$file"
+
+  if [[ -z "$binding_block" ]]; then
+    error "Hammerspoon must bind Cmd+Alt+Shift+B"
+    return
+  fi
+
+  if ! printf '%s\n' "$binding_block" | grep -Eq 'runScript\(.*toggle-sketchybar-gap\.sh'; then
+    error "Cmd+Alt+Shift+B must run toggle-sketchybar-gap.sh from Hammerspoon"
+  fi
+}
+
+check_sketchybar_gap_script_resolution() {
+  local file="$1" matches
+
+  if ! grep -Eq '^export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"$' "$file"; then
+    error "toggle-sketchybar-gap.sh must set a controlled PATH for GUI launches"
+  fi
+
+  if ! grep -Eq 'SKETCHYBAR_BIN=.*resolve_bin sketchybar .*(/opt/homebrew/bin/sketchybar).*(/usr/local/bin/sketchybar)' "$file"; then
+    error "toggle-sketchybar-gap.sh must resolve SketchyBar from explicit common paths"
+  fi
+
+  if ! grep -Eq 'AEROSPACE_BIN=.*resolve_bin aerospace .*(/opt/homebrew/bin/aerospace).*(/usr/local/bin/aerospace)' "$file"; then
+    error "toggle-sketchybar-gap.sh must resolve AeroSpace from explicit common paths"
+  fi
+
+  if ! grep -Eq '"\$SKETCHYBAR_BIN"[[:space:]]+--' "$file"; then
+    error "toggle-sketchybar-gap.sh must invoke SketchyBar through SKETCHYBAR_BIN"
+  fi
+
+  if ! grep -Eq '"\$AEROSPACE_BIN"[[:space:]]+reload-config' "$file"; then
+    error "toggle-sketchybar-gap.sh must invoke AeroSpace through AEROSPACE_BIN"
+  fi
+
+  matches="$(grep_file_noncomment '(^|[[:space:]])sketchybar[[:space:]]+--|(^|[[:space:]])aerospace[[:space:]]+reload-config' "$file")"
+  if [[ -n "$matches" ]]; then
+    echo "$matches" >&2
+    error "toggle-sketchybar-gap.sh must not rely on bare sketchybar/aerospace commands"
+  fi
+}
+
 run_active_bridge_regex_self_tests
 
 echo "Checking window-management ownership invariants under $ROOT ..."
@@ -185,6 +242,8 @@ if [[ -f "$aerospace_config" ]]; then
     "AeroSpace config must not bind Cmd+Option+D"
   check_file_noncomment "$aerospace_config" 'exec-and-forget' \
     "AeroSpace config must not use exec-and-forget bridge calls"
+  check_file_noncomment "$aerospace_config" 'cmd-alt-shift-b[[:space:]]*=.*exec-and-forget' \
+    "AeroSpace must not bind Cmd+Alt+Shift+B to exec-and-forget"
   check_aerospace_bindings "$aerospace_config"
 fi
 
@@ -226,6 +285,14 @@ if [[ -f "$hotkeys" ]]; then
     error "Cmd+Alt+M binding must call centerFocusedWindow"
   fi
 
+  if ! grep -Eq 'hs\.hotkey\.bind\(hyper,[[:space:]]*["'"'"']f["'"'"']' "$hotkeys"; then
+    error "Hammerspoon must bind Cmd+Alt+F to maximize the focused window"
+  fi
+
+  if ! grep -Eq 'maximizeFocusedWindow' "$hotkeys"; then
+    error "Cmd+Alt+F binding must call maximizeFocusedWindow"
+  fi
+
   if ! grep -Eq "hs\.hotkey\.bind\(shiftHyper,[[:space:]]*['\"]m['\"]" "$hotkeys"; then
     error "Hammerspoon must bind Cmd+Alt+Shift+M to center-main layout"
   fi
@@ -233,6 +300,15 @@ if [[ -f "$hotkeys" ]]; then
   if ! grep -Eq 'saveCurrentWorkspaceLayout\("center-main"' "$hotkeys"; then
     error "Cmd+Alt+Shift+M binding must save center-main for workspace restore"
   fi
+
+  check_hammerspoon_sketchybar_toggle_binding "$hotkeys"
+fi
+
+sketchybar_gap_script="$ROOT/wm/aerospace/toggle-sketchybar-gap.sh"
+if [[ -f "$sketchybar_gap_script" ]]; then
+  check_sketchybar_gap_script_resolution "$sketchybar_gap_script"
+else
+  error "SketchyBar gap toggle script missing: $sketchybar_gap_script"
 fi
 
 # 7. Deprecated bridge scripts are non-operative (marked deprecated, no active calls).

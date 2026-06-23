@@ -20,7 +20,7 @@ Then manually reload Hammerspoon:
 Hammerspoon menu bar icon → Reload Config
 ```
 
-Expected result: `Cmd+Alt+1..8` switches AeroSpace workspaces, Hammerspoon hotkeys apply layouts/actions, and saved layouts restore when returning to a workspace.
+Expected result: `Cmd+Alt+1..8` switches AeroSpace workspaces, and Hammerspoon hotkeys apply explicit layouts/actions. Saved layouts are persisted by layout shortcuts but are not auto-restored on workspace switch by default.
 
 ## Required apps, tools, and permissions
 
@@ -101,9 +101,11 @@ Allowed Hammerspoon → AeroSpace interaction is narrow: async, timeout-protecte
 | `Cmd+Alt+-` | Shrink focused window width. |
 | `Cmd+Alt+=` | Grow focused window width. |
 | `Cmd+Alt+M` | Center focused window. |
+| `Cmd+Alt+F` | Maximize focused window to the visible screen frame. |
 | `Cmd+Alt+S` | Apply and save `stack-right` layout for the current workspace. |
 | `Cmd+Alt+Shift+S` | Apply and save `columns` layout for the current workspace. |
 | `Cmd+Alt+Shift+M` | Apply and save `center-main` layout for the current workspace. |
+| `Cmd+Alt+Shift+B` | Toggle SketchyBar visibility/gap. |
 | `Cmd+Alt+Tab` | Focus next monitor. |
 | `Cmd+Alt+Shift+Tab` | Move focused window to next monitor. |
 
@@ -127,6 +129,7 @@ If a new machine uses different app names, update only the `apps` table in `edit
 | Known layouts | `stack-right`, `columns`, `center-main` |
 | Polling | Hammerspoon polls `aerospace list-workspaces --focused` every `0.20s`. |
 | Debounce | Restore waits `0.10s` after workspace change detection. |
+| Auto-restore default | Disabled by default (`workspaceLayoutAutoRestore = false`) to avoid stale saved geometry affecting manual layouts. |
 | Deadlock prevention | Uses async `hs.task`, one in-flight workspace query, and a `1.0s` AeroSpace CLI timeout. |
 | Stale restore prevention | Re-checks focused workspace before applying and ignores old generations. |
 | Feedback-loop prevention | Suppresses save-on-layout while restore is running. |
@@ -149,7 +152,7 @@ Manual Hammerspoon checks:
 - [ ] Hammerspoon menu bar icon is visible.
 - [ ] `Reload Config` completes without console errors.
 - [ ] `Cmd+Alt+S`, `Cmd+Alt+Shift+S`, and `Cmd+Alt+Shift+M` apply layouts and update `$HOME/.cache/dotfiles/wm-layouts/state.json`.
-- [ ] Switching away and back to the workspace restores the saved layout.
+- [ ] Explicit layout shortcuts still apply and save layouts; workspace switching does not auto-restore layouts by default.
 - [ ] `Cmd+Alt+1..8` and `Cmd+Alt+Shift+1..8` still work through AeroSpace.
 
 Useful status command:

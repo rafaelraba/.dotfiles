@@ -1,9 +1,9 @@
 local constants = require("modules.constants")
 local layouts = require("modules.layouts")
 
-local function centeredFrameForVisibleScreen(frame, visibleFrame)
-  local width = math.min(frame.w, visibleFrame.w)
-  local height = math.min(frame.h, visibleFrame.h)
+local function centeredFrameForVisibleScreen(_, visibleFrame)
+  local width = math.floor(visibleFrame.w * 0.70)
+  local height = math.floor(visibleFrame.h * 0.90)
 
   return {
     x = visibleFrame.x + math.floor((visibleFrame.w - width) / 2),
@@ -72,9 +72,28 @@ local function centerFocusedWindow()
   end)
 end
 
+local function maximizeFocusedWindow()
+  local window = hs.window.focusedWindow()
+
+  if not window then
+    return
+  end
+
+  local screen = window:screen()
+
+  if not screen then
+    return
+  end
+
+  layouts.FloatWindowsForManualLayout({ window }, function()
+    window:setFrame(visibleFrameForScreen(screen), 0)
+  end)
+end
+
 return {
   centerFocusedWindow = centerFocusedWindow,
   centeredFrameForVisibleScreen = centeredFrameForVisibleScreen,
+  maximizeFocusedWindow = maximizeFocusedWindow,
   resizeFocusedWindow = resizeFocusedWindow,
   shrinkFocusedWindow = shrinkFocusedWindow,
   growFocusedWindow = growFocusedWindow,
