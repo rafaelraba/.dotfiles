@@ -23,10 +23,10 @@ macos-option-as-alt = left
 
 # 📝 Font
 
-font-size = 17.5
+font-size = 15
 font-thicken = true
 adjust-cell-height = 30%
-font-family = IosevkaTerm Nerd Font Mono
+font-family = JetBrainsMono Nerd Font Mono
 
 # 📋 Clipboard
 
