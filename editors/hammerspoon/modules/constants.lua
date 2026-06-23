@@ -18,18 +18,4 @@ M.edgeSnapThreshold = 12
 -- Layout limits.
 M.stackRightMaxWindows = 3
 
--- Workspace layout restore behavior.
-M.workspaceLayoutAutoRestore = true
-M.workspaceLayoutPollInterval = 0.12
-M.workspaceLayoutRestoreDebounce = 0.05
-M.aerospaceCliTimeout = 1.0
-M.workspaceLayoutStatePath = os.getenv("HOME") .. "/.cache/dotfiles/wm-layouts/state.json"
-M.aerospaceCliCandidates = {}
-if os.getenv("AEROSPACE_BIN") then
-  table.insert(M.aerospaceCliCandidates, os.getenv("AEROSPACE_BIN"))
-end
-table.insert(M.aerospaceCliCandidates, "/opt/homebrew/bin/aerospace")
-table.insert(M.aerospaceCliCandidates, "/usr/local/bin/aerospace")
-table.insert(M.aerospaceCliCandidates, "aerospace")
-
 return M

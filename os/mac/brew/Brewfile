@@ -1,9 +1,8 @@
 # Taps
-# Core apps/utilities + window-management custom tap.
+# Core apps/utilities.
 tap "denisidoro/tools"
 tap "felixkratz/formulae"
 tap "gentleman-programming/tap"
-tap "nikitabobko/tap"
 tap "oven-sh/bun"
 
 # Core dev CLI
@@ -50,7 +49,6 @@ brew "hyperfine"
 brew "mas"
 
 # macOS apps
-cask "nikitabobko/tap/aerospace"
 cask "ghostty"
 cask "hammerspoon"
 cask "obsidian"

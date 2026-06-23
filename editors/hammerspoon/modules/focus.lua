@@ -10,13 +10,6 @@ local function focusedWindowOrAlert()
   return window
 end
 
-local function clearSavedWorkspaceLayout()
-  local ok, workspaceLayoutRestore = pcall(require, "modules.workspace_layout_restore")
-  if ok and workspaceLayoutRestore and workspaceLayoutRestore.clearCurrentWorkspaceLayout then
-    workspaceLayoutRestore.clearCurrentWorkspaceLayout()
-  end
-end
-
 local function windowCenter(window)
   local frame = window:frame()
 
@@ -149,7 +142,6 @@ local function moveDirection(direction)
     frame.y = frame.y + moveStep
   end
 
-  clearSavedWorkspaceLayout()
   window:setFrame(frame, 0)
 end
 

@@ -1,39 +1,37 @@
-<h1 align="center">
-  .dotfiles creados con <a href="https://github.com/CodelyTV/dotly">🌚 dotly</a>
-</h1>
+# .dotfiles created with [dotly](https://github.com/CodelyTV/dotly)
 
-Setup personal para macOS: Neovim, tmux, Ghostty, LazyGit, Aerospace, Hammerspoon, SketchyBar, Raycast, zsh/Starship.
+Personal macOS setup: Neovim, tmux, Ghostty, LazyGit, Hammerspoon, SketchyBar, Raycast, zsh, and Starship.
 
-## 🚀 Instalación rápida
+## Quick install
 
 ```bash
-# 1. Clonar el repo
+# 1. Clone the repo
 git clone git@github.com:rafaelraba/.dotfiles.git ~/.dotfiles
 
-# 2. Un comando para todo
+# 2. Run the full restore
 cd ~/.dotfiles && ./restore.sh
 ```
 
-Reiniciá la terminal al terminar.
+Restart the terminal when it finishes.
 
-## 📋 Requisitos previos
+## Prerequisites
 
-- Git + SSH key configurada en GitHub.
-- Homebrew instalado (macOS): [brew.sh](https://brew.sh).
-- En macOS Intel, corré el mismo `restore.sh`; dotly aplica los symlinks de la plataforma correcta.
+- Git with an SSH key configured in GitHub.
+- Homebrew installed on macOS: [brew.sh](https://brew.sh).
+- On Intel macOS, run the same `restore.sh`; dotly applies the correct platform symlinks.
 
-## 🧩 Qué instala
+## What gets installed
 
-`restore.sh` hace lo siguiente de forma idempotente:
+`restore.sh` is idempotent and does the following:
 
-1. Inicializa el submódulo `dotly`.
-2. Crea los symlinks con `dot self install`.
-3. Instala [TPM](https://github.com/tmux-plugins/tpm) y los plugins de tmux.
-4. Corre `brew bundle` con `os/mac/brew/Brewfile`.
+1. Initializes the `dotly` submodule.
+2. Creates symlinks with `dot self install`.
+3. Installs [TPM](https://github.com/tmux-plugins/tpm) and tmux plugins.
+4. Runs `brew bundle` with `os/mac/brew/Brewfile`.
 
-## 🔧 Instalación manual
+## Manual install
 
-Si preferís controlar cada paso:
+If you prefer to control each step:
 
 ```bash
 git clone git@github.com:rafaelraba/.dotfiles.git ~/.dotfiles
@@ -44,43 +42,43 @@ git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
 brew bundle --file="$HOME/.dotfiles/os/mac/brew/Brewfile"
 ```
 
-## 🎯 Post-instalación
+## Post-install
 
-Después de `restore.sh`:
+After `restore.sh`:
 
-1. **Aerospace**: `aerospace reload-config`
-2. **Hammerspoon**: menú → `Reload Config`
-3. **Raycast**: abrilo y configurá el atajo de teclado.
-4. **Ghostty**: en Settings, usá `JetBrainsMono Nerd Font` o `IosevkaTerm Nerd Font`.
+1. **Hammerspoon**: menu → `Reload Config`.
+2. **Raycast**: open it and configure the keyboard shortcut.
+3. **Ghostty**: in Settings, use `JetBrainsMono Nerd Font` or `IosevkaTerm Nerd Font`.
 
-## 🔐 Permisos de accesibilidad
+## Accessibility permissions
 
-Aerospace, Hammerspoon y Raycast necesitan permisos de accesibilidad:
+Hammerspoon and Raycast need Accessibility permissions for the active workflow:
 
 ```text
 System Settings → Privacy & Security → Accessibility
-→ Agregar/activar: Aerospace, Hammerspoon, Raycast
+→ Add/enable: Hammerspoon, Raycast
 ```
 
-Sin esto no funcionan los atajos de window management.
+Without Hammerspoon permissions, window-management hotkeys will not work.
 
-## 📚 Documentación
+## Documentation
 
-- [AeroSpace + Hammerspoon window management](doc/window-management.md): restore path, ownership model, hotkeys, verification, and troubleshooting.
+- [Hammerspoon window management](doc/window-management.md): Hammerspoon-only ownership model, hotkeys, verification, and known tradeoffs.
 
-## ✅ Checklist de verificación
+## Verification checklist
 
-- [ ] `test/scripts/wm-invariants.sh` pasa todas las comprobaciones de propiedad entre AeroSpace y Hammerspoon.
-- [ ] `aerospace reload-config` no tira errores.
-- [ ] Hammerspoon muestra el ícono en la barra y no hay errores en la consola.
-- [ ] `Cmd+Alt+S` / `Cmd+Alt+Shift+S` guardan layout en `$HOME/.cache/dotfiles/wm-layouts/state.json` y se restauran al volver al workspace.
-- [ ] `nvim` abre sin errores de plugins.
-- [ ] `tmux` inicia y el prefix es `Ctrl+a`.
-- [ ] `lazygit` abre.
-- [ ] `ghostty` usa una Nerd Font.
-- [ ] Los atajos de Aerospace/Hammerspoon/Raycast responden.
+- [ ] `test/scripts/wm-invariants.sh` passes all window-management ownership checks.
+- [ ] Hammerspoon shows the menu bar icon and has no console errors.
+- [ ] `Cmd+Alt+S`, `Cmd+Alt+Shift+S`, and `Cmd+Alt+Shift+M` apply layouts directly from Hammerspoon.
+- [ ] Mission Control `Switch to Desktop 1..10` shortcuts are enabled as `Ctrl+1..Ctrl+0`; `Cmd+Alt+1..0` proxies them through Hammerspoon.
+- [ ] `nvim` opens without plugin errors.
+- [ ] `tmux` starts and the prefix is `Ctrl+a`.
+- [ ] `lazygit` opens.
+- [ ] `ghostty` uses a Nerd Font.
+- [ ] Hammerspoon/Raycast shortcuts respond.
 
-## ⚠️ Notas conocidas
+## Known notes
 
-- El Brewfile usa `python@3.13` como fórmula estable de Python.
-- Algunos paquetes de `brew bundle` pueden fallar por dependencias manuales; revisar el output y reintentar.
+- The Brewfile uses `python@3.13` as the stable Python formula.
+- Some `brew bundle` packages may fail because of manual dependencies; review the output and retry.
+- Window management is Hammerspoon-only. Native macOS Spaces are driven through Mission Control shortcuts, so there are no repo-managed workspace IDs or move-to-workspace shortcuts.

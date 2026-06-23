@@ -2,7 +2,6 @@ local constants = require("modules.constants")
 local focus = require("modules.focus")
 local layouts = require("modules.layouts")
 local resize = require("modules.resize")
-local workspaceLayoutRestore = require("modules.workspace_layout_restore")
 
 local hyper = constants.hyper
 local shiftHyper = { "cmd", "alt", "shift" }
@@ -37,6 +36,15 @@ local directions = {
   l = "right",
 }
 
+local desktopKeys = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "0" }
+
+-- Native macOS Spaces. Mission Control must expose Ctrl+1..Ctrl+0 shortcuts.
+for _, key in ipairs(desktopKeys) do
+  hs.hotkey.bind(hyper, key, function()
+    hs.eventtap.keyStroke({ "ctrl" }, key, 0)
+  end)
+end
+
 -- Focus and move windows.
 for key, direction in pairs(directions) do
   hs.hotkey.bind(hyper, key, function()
@@ -66,31 +74,22 @@ hs.hotkey.bind(hyper, "f", function()
 end)
 
 hs.hotkey.bind(shiftHyper, "b", function()
-  runScript((os.getenv("HOME") or "") .. "/.dotfiles/wm/aerospace/toggle-sketchybar-gap.sh")
+  runScript((os.getenv("HOME") or "") .. "/.dotfiles/scripts/wm/toggle-sketchybar.sh")
 end)
 
 -- Layout presets. The previous "/" bindings registered but did not fire,
--- likely because another process (macOS accessibility/Raycast/AeroSpace)
+-- likely because another process (macOS accessibility/Raycast)
 -- intercepts Cmd+Alt+"/". "s" is free and mnemonic for "stack" layout.
 hs.hotkey.bind(hyper, "s", function()
-  local applied, windowIds = layouts.StackRightLayout()
-  if applied then
-    workspaceLayoutRestore.saveCurrentWorkspaceLayout("stack-right", windowIds)
-  end
+  layouts.StackRightLayout()
 end)
 
 hs.hotkey.bind(shiftHyper, "s", function()
-  local applied, windowIds = layouts.ColumnsLayout()
-  if applied then
-    workspaceLayoutRestore.saveCurrentWorkspaceLayout("columns", windowIds)
-  end
+  layouts.ColumnsLayout()
 end)
 
 hs.hotkey.bind(shiftHyper, "m", function()
-  local applied, windowIds = layouts.CenterMainLayout()
-  if applied then
-    workspaceLayoutRestore.saveCurrentWorkspaceLayout("center-main", windowIds)
-  end
+  layouts.CenterMainLayout()
 end)
 
 -- Monitor navigation.

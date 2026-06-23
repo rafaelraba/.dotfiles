@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-CONFIG="$HOME/.config/aerospace/aerospace.toml"
-VISIBLE_GAP=42
-HIDDEN_GAP=8
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 resolve_bin() {
@@ -38,19 +35,11 @@ resolve_bin() {
 }
 
 SKETCHYBAR_BIN="$(resolve_bin sketchybar SKETCHYBAR_BIN /opt/homebrew/bin/sketchybar /usr/local/bin/sketchybar)"
-AEROSPACE_BIN="$(resolve_bin aerospace AEROSPACE_BIN /opt/homebrew/bin/aerospace /usr/local/bin/aerospace)"
 
 hidden="$("$SKETCHYBAR_BIN" --query bar 2>/dev/null | /usr/bin/awk -F'"' '/"hidden"/ { print $4; exit }')"
 
 if [ "$hidden" = "on" ]; then
-	# Show bar, reserve room for it, and repaint each monitor workspace.
 	"$SKETCHYBAR_BIN" --bar hidden=off
-	"$SKETCHYBAR_BIN" --trigger aerospace_workspace_change
-	/usr/bin/perl -0pi -e "s/outer\.top = \d+/outer.top = $VISIBLE_GAP/" "$CONFIG"
 else
-	# Hide bar and reclaim the top gap.
 	"$SKETCHYBAR_BIN" --bar hidden=on
-	/usr/bin/perl -0pi -e "s/outer\.top = \d+/outer.top = $HIDDEN_GAP/" "$CONFIG"
 fi
-
-"$AEROSPACE_BIN" reload-config

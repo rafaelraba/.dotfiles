@@ -35,7 +35,6 @@ check_command() {
 }
 
 echo "Symlinks:"
-check_symlink "$HOME/.config/aerospace"
 check_symlink "$HOME/.hammerspoon"
 check_symlink "$HOME/.config/nvim"
 check_symlink "$HOME/.config/tmux"
@@ -57,17 +56,15 @@ check_command rg
 
 echo ""
 echo "Window management:"
-check_command aerospace
+check_command hs
 check_command sketchybar
 
 echo ""
 echo "Manual steps after first install:"
 echo "  1. Open Raycast and grant Accessibility permissions."
 echo "  2. Open Hammerspoon and enable 'Accessibility' in System Settings."
-echo "  3. Open Aerospace and enable 'Accessibility' in System Settings."
-echo "  4. Reload config: aerospace reload-config"
-echo "  5. Reload Hammerspoon config: Hammerspoon menu → Reload Config"
-echo "  6. In Ghostty, set the font to 'JetBrainsMono Nerd Font' or 'IosevkaTerm Nerd Font'."
+echo "  3. Reload Hammerspoon config: Hammerspoon menu → Reload Config"
+echo "  4. In Ghostty, set the font to 'JetBrainsMono Nerd Font' or 'IosevkaTerm Nerd Font'."
 echo ""
 
 exit 0

@@ -1,125 +1,10 @@
 local constants = require("modules.constants")
 local gap = constants.gap
-local resolvedAerospaceCli = nil
-local pendingFloatTasks = {}
 
 hs.window.animationDuration = 0
 
-local function executableExists(command)
-  local attributes = hs.fs.attributes(command)
-  return attributes and attributes.mode == "file"
-end
-
-local function executableOnPath(command)
-  if command:find("/", 1, true) then
-    return executableExists(command) and command or nil
-  end
-
-  local path = os.getenv("PATH") or ""
-  for directory in path:gmatch("([^:]+)") do
-    local candidate = directory .. "/" .. command
-    if executableExists(candidate) then
-      return candidate
-    end
-  end
-
-  return nil
-end
-
-local function aerospaceCli()
-  if resolvedAerospaceCli then
-    return resolvedAerospaceCli
-  end
-
-  for _, candidate in ipairs(constants.aerospaceCliCandidates) do
-    local executable = candidate and executableOnPath(candidate)
-    if executable then
-      resolvedAerospaceCli = executable
-      return resolvedAerospaceCli
-    end
-  end
-
-  return nil
-end
-
-local function cleanupFloatTask(token)
-  local entry = pendingFloatTasks[token]
-  if not entry then
-    return
-  end
-
-  if entry.timer then
-    entry.timer:stop()
-  end
-
-  pendingFloatTasks[token] = nil
-end
-
-local function floatWindowsForManualLayout(windows, callback)
-  local cli = aerospaceCli()
-  if not cli then
-    callback()
-    return
-  end
-
-  local remaining = #windows
-  if remaining == 0 then
-    callback()
-    return
-  end
-
-  local finished = false
-  local function completeOne(token)
-    if not pendingFloatTasks[token] then
-      return
-    end
-
-    cleanupFloatTask(token)
-    remaining = remaining - 1
-    if remaining <= 0 and not finished then
-      finished = true
-      callback()
-    end
-  end
-
-  for _, window in ipairs(windows) do
-    local windowId = window:id()
-    local token = tostring(windowId) .. ":" .. tostring(hs.timer.absoluteTime())
-    local task
-
-    task = hs.task.new(cli, function(exitCode, _, stderr)
-      if exitCode ~= 0 then
-        hs.printf("AeroSpace float failed for window %d: exit=%s %s", windowId, tostring(exitCode), tostring(stderr or ""))
-      end
-      completeOne(token)
-    end, { "layout", "--window-id", tostring(windowId), "floating" })
-
-    if not task then
-      hs.printf("AeroSpace float task could not be created for window %d", windowId)
-      remaining = remaining - 1
-      if remaining <= 0 and not finished then
-        finished = true
-        callback()
-      end
-    else
-      pendingFloatTasks[token] = {
-        task = task,
-        timer = hs.timer.doAfter(constants.aerospaceCliTimeout, function()
-          local entry = pendingFloatTasks[token]
-          if entry and entry.task then
-            entry.task:terminate()
-          end
-          hs.printf("AeroSpace float timed out for window %d", windowId)
-          completeOne(token)
-        end),
-      }
-
-      if not task:start() then
-        hs.printf("AeroSpace float could not start for window %d", windowId)
-        completeOne(token)
-      end
-    end
-  end
+local function floatWindowsForManualLayout(_, callback)
+  callback()
 end
 
 local function applyAfterFloat(windows, applyFrames, onApplied)
@@ -468,8 +353,4 @@ return {
   CenterMainLayout = CenterMainLayout,
   WindowIdsOnCurrentScreen = WindowIdsOnCurrentScreen,
   FloatWindowsForManualLayout = floatWindowsForManualLayout,
-  _test = {
-    aerospaceCli = aerospaceCli,
-    executableOnPath = executableOnPath,
-  },
 }

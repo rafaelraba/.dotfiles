@@ -139,35 +139,16 @@ run_active_bridge_regex_self_tests() {
   assert_active_bridge_fixture 'echo deprecated "$HS" -c foo' no-match "deprecation-only message"
 }
 
-# Allowed AeroSpace binding commands: workspace switching, move-node-to-workspace, reload.
-check_aerospace_bindings() {
-  local file="$1"
-  local allowed='^(workspace|move-node-to-workspace|reload-config)$'
-  local line action first_token
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    [[ -z "$line" ]] && continue
-    action=$(printf '%s\n' "$line" | sed -E "s/^[^=]+=[[:space:]]*['\"]([^'\"]+)['\"].*/\1/")
-    first_token="${action%% *}"
-    if [[ ! "$first_token" =~ $allowed ]]; then
-      echo "DISALLOWED BINDING: $line" >&2
-      error "AeroSpace binding uses disallowed command '$first_token' (allowed: workspace, move-node-to-workspace, reload-config)"
-    fi
-  done < <(awk '/^\[mode\..*\.binding\]/{s=1; next} /^\[/{s=0} s && !/^[[:space:]]*#/ && !/^[[:space:]]*$/' "$file")
-}
-
-check_hammerspoon_aerospace_usage() {
+check_no_active_aerospace_runtime_usage() {
   local dir="$1"
-  local matches disallowed
-  matches="$(grep -R --include='*.lua' -v -E '^[[:space:]]*(#|--)' "$dir" 2>/dev/null | grep -E 'aerospace|aerospaceCli' || true)"
+  local matches
+  matches="$(grep -R -v -E '^[[:space:]]*(#|--)' "$dir" 2>/dev/null | grep -Ei 'aerospace|aerospaceCli|AEROSPACE_' || true)"
   if [[ -z "$matches" ]]; then
     return
   fi
 
-  disallowed="$(printf '%s\n' "$matches" | grep -v -E 'list-workspaces --focused|layout --window-id .* floating|aerospaceCli|aerospace CLI|AEROSPACE_BIN|/aerospace|["'"'"']aerospace["'"'"']' || true)"
-  if [[ -n "$disallowed" ]]; then
-    echo "$disallowed" >&2
-    error "Hammerspoon may only query the focused AeroSpace workspace or float target windows before applying layouts"
-  fi
+  echo "$matches" >&2
+  error "Runtime files must not reference or call AeroSpace"
 }
 
 check_hammerspoon_sketchybar_toggle_binding() {
@@ -192,8 +173,61 @@ check_hammerspoon_sketchybar_toggle_binding() {
     return
   fi
 
-  if ! printf '%s\n' "$binding_block" | grep -Eq 'runScript\(.*toggle-sketchybar-gap\.sh'; then
-    error "Cmd+Alt+Shift+B must run toggle-sketchybar-gap.sh from Hammerspoon"
+  if ! printf '%s\n' "$binding_block" | grep -Eq 'runScript\(.*scripts/wm/toggle-sketchybar\.sh'; then
+    error "Cmd+Alt+Shift+B must run scripts/wm/toggle-sketchybar.sh from Hammerspoon"
+  fi
+}
+
+check_hammerspoon_layout_binding() {
+  local file="$1" modifiers="$2" key="$3" callback_name="$4" label="$5"
+  local line binding_block="" in_binding=0 modifier_pattern
+
+  if [[ "$modifiers" == "hyper" ]]; then
+    modifier_pattern='hyper'
+  else
+    modifier_pattern='shiftHyper'
+  fi
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" =~ hs\.hotkey\.bind\($modifier_pattern,[[:space:]]*[\"\']$key[\"\'] ]]; then
+      in_binding=1
+    fi
+
+    if [[ "$in_binding" -eq 1 ]]; then
+      binding_block+="$line"$'\n'
+      if [[ "$line" =~ ^[[:space:]]*end\) ]]; then
+        break
+      fi
+    fi
+  done < "$file"
+
+  if [[ -z "$binding_block" ]]; then
+    error "Hammerspoon must bind $label"
+    return
+  fi
+
+  if ! printf '%s\n' "$binding_block" | grep -Eq "$callback_name"; then
+    error "$label binding must call $callback_name"
+  fi
+
+  if printf '%s\n' "$binding_block" | grep -Eq 'saveCurrentWorkspaceLayout|workspaceLayoutRestore'; then
+    error "$label binding must not save per-workspace restore state"
+  fi
+}
+
+check_hammerspoon_native_desktop_bindings() {
+  local file="$1"
+
+  if ! grep -Eq 'desktopKeys[[:space:]]*=[[:space:]]*\{[[:space:]]*"1".*"9".*"0"[[:space:]]*\}' "$file"; then
+    error "Hammerspoon must define native desktop keys 1..9 and 0"
+  fi
+
+  if ! grep -Eq 'hs\.hotkey\.bind\(hyper,[[:space:]]*key' "$file"; then
+    error "Hammerspoon must bind Cmd+Alt desktop keys from desktopKeys"
+  fi
+
+  if ! grep -Eq 'hs\.eventtap\.keyStroke\(\{[[:space:]]*"ctrl"[[:space:]]*\},[[:space:]]*key' "$file"; then
+    error "Hammerspoon desktop bindings must proxy to native macOS Ctrl+key shortcuts"
   fi
 }
 
@@ -201,71 +235,21 @@ check_sketchybar_gap_script_resolution() {
   local file="$1" matches
 
   if ! grep -Eq '^export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"$' "$file"; then
-    error "toggle-sketchybar-gap.sh must set a controlled PATH for GUI launches"
+    error "toggle-sketchybar.sh must set a controlled PATH for GUI launches"
   fi
 
   if ! grep -Eq 'SKETCHYBAR_BIN=.*resolve_bin sketchybar .*(/opt/homebrew/bin/sketchybar).*(/usr/local/bin/sketchybar)' "$file"; then
-    error "toggle-sketchybar-gap.sh must resolve SketchyBar from explicit common paths"
-  fi
-
-  if ! grep -Eq 'AEROSPACE_BIN=.*resolve_bin aerospace .*(/opt/homebrew/bin/aerospace).*(/usr/local/bin/aerospace)' "$file"; then
-    error "toggle-sketchybar-gap.sh must resolve AeroSpace from explicit common paths"
+    error "toggle-sketchybar.sh must resolve SketchyBar from explicit common paths"
   fi
 
   if ! grep -Eq '"\$SKETCHYBAR_BIN"[[:space:]]+--' "$file"; then
-    error "toggle-sketchybar-gap.sh must invoke SketchyBar through SKETCHYBAR_BIN"
+    error "toggle-sketchybar.sh must invoke SketchyBar through SKETCHYBAR_BIN"
   fi
 
-  if ! grep -Eq '"\$AEROSPACE_BIN"[[:space:]]+reload-config' "$file"; then
-    error "toggle-sketchybar-gap.sh must invoke AeroSpace through AEROSPACE_BIN"
-  fi
-
-  matches="$(grep_file_noncomment '(^|[[:space:]])sketchybar[[:space:]]+--|(^|[[:space:]])aerospace[[:space:]]+reload-config' "$file")"
+  matches="$(grep_file_noncomment '(^|[[:space:]])sketchybar[[:space:]]+--|(^|[[:space:]])aerospace([[:space:]]|$)' "$file")"
   if [[ -n "$matches" ]]; then
     echo "$matches" >&2
-    error "toggle-sketchybar-gap.sh must not rely on bare sketchybar/aerospace commands"
-  fi
-}
-
-check_workspace_monitor_assignments() {
-  local file="$1" workspace monitor
-
-  for workspace in 1 2 3 4; do
-    monitor=1
-    if ! grep -Eq "^[[:space:]]*$workspace[[:space:]]*=[[:space:]]*$monitor[[:space:]]*$" "$file"; then
-      error "AeroSpace workspace $workspace must be assigned to monitor $monitor"
-    fi
-  done
-
-  for workspace in 5 6 7 8; do
-    monitor=2
-    if ! grep -Eq "^[[:space:]]*$workspace[[:space:]]*=[[:space:]]*$monitor[[:space:]]*$" "$file"; then
-      error "AeroSpace workspace $workspace must be assigned to monitor $monitor"
-    fi
-  done
-}
-
-check_aerospace_workspace_change_hook() {
-  local file="$1" hooks disallowed
-
-  hooks="$(grep_file_noncomment '^exec-on-workspace-change[[:space:]]*=' "$file")"
-  if [[ -z "$hooks" ]]; then
-    error "AeroSpace must trigger SketchyBar when the focused workspace changes"
-    return
-  fi
-
-  if ! printf '%s\n' "$hooks" | grep -Eq 'sketchybar[[:space:]]+--trigger[[:space:]]+aerospace_workspace_change'; then
-    error "AeroSpace workspace-change hook must trigger SketchyBar aerospace_workspace_change"
-  fi
-
-  if ! printf '%s\n' "$hooks" | grep -Eq 'FOCUSED_WORKSPACE="?\$AEROSPACE_FOCUSED_WORKSPACE"?'; then
-    error "AeroSpace workspace-change hook must pass FOCUSED_WORKSPACE from AEROSPACE_FOCUSED_WORKSPACE"
-  fi
-
-  disallowed="$(printf '%s\n' "$hooks" | grep -v -E 'sketchybar[[:space:]]+--trigger[[:space:]]+aerospace_workspace_change' || true)"
-  if [[ -n "$disallowed" ]]; then
-    echo "$disallowed" >&2
-    error "AeroSpace workspace-change hooks must stay SketchyBar-only"
+    error "toggle-sketchybar.sh must not rely on bare sketchybar or call AeroSpace"
   fi
 }
 
@@ -273,23 +257,17 @@ run_active_bridge_regex_self_tests
 
 echo "Checking window-management ownership invariants under $ROOT ..."
 
-# 1. AeroSpace config owns only workspace switching, move-node-to-workspace, reload.
-aerospace_config="$ROOT/wm/aerospace/aerospace.toml"
-if [[ -f "$aerospace_config" ]]; then
-  check_file "$aerospace_config" 'hammerspoon|/opt/homebrew/bin/hs|\bhs\s' \
-    "AeroSpace config must not call Hammerspoon"
-  check_file "$aerospace_config" '(^|[^-])on-workspace-change|sync' \
-    "AeroSpace config must not use workspace-change sync hooks"
-  check_file "$aerospace_config" 'cmd[-_]?alt[-_]?d|cmd[-_]?option[-_]?d' \
-    "AeroSpace config must not bind Cmd+Option+D"
-  check_file_noncomment "$aerospace_config" 'exec-and-forget' \
-    "AeroSpace config must not use exec-and-forget bridge calls"
-  check_file_noncomment "$aerospace_config" 'cmd-alt-shift-b[[:space:]]*=.*exec-and-forget' \
-    "AeroSpace must not bind Cmd+Alt+Shift+B to exec-and-forget"
-  check_aerospace_bindings "$aerospace_config"
-  check_workspace_monitor_assignments "$aerospace_config"
-  check_aerospace_workspace_change_hook "$aerospace_config"
+# 1. No AeroSpace install/config wiring remains active in the repo.
+if [[ -e "$ROOT/wm/aerospace" ]]; then
+  error "AeroSpace config directory must not exist: $ROOT/wm/aerospace"
 fi
+
+for file in "$ROOT/os/mac/brew/Brewfile" "$ROOT/symlinks/conf.macos.yaml" "$ROOT/restoration_scripts/01-verify-install.sh"; do
+  if [[ -f "$file" ]]; then
+    check_file_noncomment "$file" 'aerospace|nikitabobko/tap' \
+      "AeroSpace install/config reference found in $file"
+  fi
+done
 
 # 2. No active Hammerspoon bridge calls in scripts.
 if [[ -d "$ROOT/scripts" ]]; then
@@ -312,12 +290,16 @@ if [[ -f "$hotkeys" ]]; then
     "Hammerspoon hotkeys must not use invalid key names minus/equals/slash"
 fi
 
-# 5. Hammerspoon may query AeroSpace from its own polling loop and may float
-# target windows before frame-based manual layouts. It must not become an
-# AeroSpace callback bridge or general-purpose AeroSpace scripting layer.
+# 5. Hammerspoon is standalone and runtime scripts must not call or reference AeroSpace.
 if [[ -d "$ROOT/editors/hammerspoon" ]]; then
-  check_hammerspoon_aerospace_usage "$ROOT/editors/hammerspoon"
+  check_no_active_aerospace_runtime_usage "$ROOT/editors/hammerspoon"
 fi
+
+for scope in "$ROOT/scripts" "$ROOT/wm"; do
+  if [[ -d "$scope" ]]; then
+    check_no_active_aerospace_runtime_usage "$scope"
+  fi
+done
 
 # 6. Hammerspoon owns centering the focused window through Cmd+Alt+M.
 if [[ -f "$hotkeys" ]]; then
@@ -337,49 +319,24 @@ if [[ -f "$hotkeys" ]]; then
     error "Cmd+Alt+F binding must call maximizeFocusedWindow"
   fi
 
-  if ! grep -Eq "hs\.hotkey\.bind\(shiftHyper,[[:space:]]*['\"]m['\"]" "$hotkeys"; then
-    error "Hammerspoon must bind Cmd+Alt+Shift+M to center-main layout"
-  fi
+  check_hammerspoon_layout_binding "$hotkeys" hyper s StackRightLayout "Cmd+Alt+S"
+  check_hammerspoon_layout_binding "$hotkeys" shiftHyper s ColumnsLayout "Cmd+Alt+Shift+S"
+  check_hammerspoon_layout_binding "$hotkeys" shiftHyper m CenterMainLayout "Cmd+Alt+Shift+M"
+  check_hammerspoon_native_desktop_bindings "$hotkeys"
 
-  if ! grep -Eq 'saveCurrentWorkspaceLayout\("center-main"' "$hotkeys"; then
-    error "Cmd+Alt+Shift+M binding must save center-main for workspace restore"
+  if grep -Eq 'saveCurrentWorkspaceLayout|workspaceLayoutRestore' "$hotkeys"; then
+    error "Hammerspoon layout hotkeys must not save per-workspace restore state"
   fi
 
   check_hammerspoon_sketchybar_toggle_binding "$hotkeys"
 fi
 
-sketchybar_gap_script="$ROOT/wm/aerospace/toggle-sketchybar-gap.sh"
+sketchybar_gap_script="$ROOT/scripts/wm/toggle-sketchybar.sh"
 if [[ -f "$sketchybar_gap_script" ]]; then
   check_sketchybar_gap_script_resolution "$sketchybar_gap_script"
 else
-  error "SketchyBar gap toggle script missing: $sketchybar_gap_script"
+  error "SketchyBar toggle script missing: $sketchybar_gap_script"
 fi
-
-# 7. Deprecated bridge scripts are non-operative (marked deprecated, no active calls).
-deprecated_scripts=(
-  "$ROOT/scripts/wm/lib/aerospace-windows.sh"
-  "$ROOT/scripts/aerospace-columns-layout.sh"
-  "$ROOT/scripts/aerospace-stack-right-layout.sh"
-  "$ROOT/scripts/wm/layout-columns.sh"
-  "$ROOT/scripts/wm/layout-stack-right.sh"
-  "$ROOT/scripts/legacy/aerospace-dev-layout.sh"
-)
-
-for script in "${deprecated_scripts[@]}"; do
-  if [[ -f "$script" ]]; then
-    if ! grep -Eiq 'DEPRECATED|deprecated' "$script"; then
-      error "$script is not marked deprecated"
-    fi
-
-    script_matches="$(grep_file_active_bridge "$ACTIVE_HS_BRIDGE|aerospace[[:space:]]+(layout|stack|columns)|(^|[[:space:]])hs\." "$script")"
-    if [[ -n "$script_matches" ]]; then
-      echo "$script_matches" >&2
-      error "$script appears to contain active bridge code"
-    fi
-  else
-    error "Deprecated script missing: $script"
-  fi
-done
 
 if [[ "$fail" -eq 0 ]]; then
   echo "All window-management invariants passed."
