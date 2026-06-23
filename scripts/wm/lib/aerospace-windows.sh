@@ -1,32 +1,11 @@
 #!/usr/bin/env bash
-set -euo pipefail
 
-# Shared helpers for Aerospace -> Hammerspoon layout scripts.
+# DEPRECATED: This AeroSpace -> Hammerspoon bridge helper is no longer used.
+# The active config applies layouts directly in Hammerspoon via hs.window.
+# Kept for reference only. It defines no active helpers and does not call /opt/homebrew/bin/hs.
 
-aerospace_focused_workspace_ids() {
-  aerospace list-windows --workspace focused --format '%{window-id}'
-}
-
-float_window_ids() {
-  local ids=("$@")
-
-  for window_id in "${ids[@]}"; do
-    aerospace layout --window-id "$window_id" floating >/dev/null 2>&1 || true
-  done
-}
-
-call_hs_layout() {
-  local layout_fn="$1"
-  shift
-  local ids=("$@")
-
-  if [ "${#ids[@]}" -eq 0 ]; then
-    return 0
-  fi
-
-  local lua_ids
-  lua_ids="$(printf ',%s' "${ids[@]}")"
-  lua_ids="{${lua_ids#,}}"
-
-  /opt/homebrew/bin/hs -c "${layout_fn}(${lua_ids})"
-}
+# Safe to source: this block only runs when the file is executed directly.
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  set -euo pipefail
+  echo "aerospace-windows.sh is deprecated and no longer provides active bridge helpers." >&2
+fi

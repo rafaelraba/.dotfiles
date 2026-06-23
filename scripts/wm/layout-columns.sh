@@ -1,19 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/lib/aerospace-windows.sh"
+# DEPRECATED: This AeroSpace -> Hammerspoon bridge script is no longer used.
+# The active config applies layouts directly in Hammerspoon via hs.window.
+# Kept for reference only. It does nothing and exits safely.
 
-window_ids=()
-while IFS= read -r window_id; do
-  if [ -n "$window_id" ]; then
-    window_ids+=("$window_id")
-  fi
-done < <(aerospace_focused_workspace_ids)
-
-if [ "${#window_ids[@]}" -lt 2 ]; then
-  exit 0
-fi
-
-float_window_ids "${window_ids[@]}"
-call_hs_layout "ColumnsLayoutForIds" "${window_ids[@]}"
+echo "layout-columns.sh is deprecated and no longer executes any bridge." >&2
+exit 0

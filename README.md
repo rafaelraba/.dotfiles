@@ -66,8 +66,10 @@ Sin esto no funcionan los atajos de window management.
 
 ## ✅ Checklist de verificación
 
+- [ ] `test/scripts/wm-invariants.sh` pasa todas las comprobaciones de propiedad entre AeroSpace y Hammerspoon.
 - [ ] `aerospace reload-config` no tira errores.
 - [ ] Hammerspoon muestra el ícono en la barra y no hay errores en la consola.
+- [ ] `Cmd+Alt+S` / `Cmd+Alt+Shift+S` guardan layout en `$HOME/.cache/dotfiles/wm-layouts/state.json` y se restauran al volver al workspace.
 - [ ] `nvim` abre sin errores de plugins.
 - [ ] `tmux` inicia y el prefix es `Ctrl+a`.
 - [ ] `lazygit` abre.

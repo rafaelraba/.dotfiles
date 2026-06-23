@@ -1,4 +1,25 @@
 local constants = require("modules.constants")
+local layouts = require("modules.layouts")
+
+local function centeredFrameForVisibleScreen(frame, visibleFrame)
+  local width = math.min(frame.w, visibleFrame.w)
+  local height = math.min(frame.h, visibleFrame.h)
+
+  return {
+    x = visibleFrame.x + math.floor((visibleFrame.w - width) / 2),
+    y = visibleFrame.y + math.floor((visibleFrame.h - height) / 2),
+    w = width,
+    h = height,
+  }
+end
+
+local function visibleFrameForScreen(screen)
+  if type(screen.visibleFrame) == "function" then
+    return screen:visibleFrame()
+  end
+
+  return screen:frame()
+end
 
 local function resizeFocusedWindow(delta)
   local window = hs.window.focusedWindow()
@@ -15,7 +36,7 @@ local function resizeFocusedWindow(delta)
   local newWidth = math.max(minWidth, math.min(maxWidth, frame.w + delta))
   local widthDelta = newWidth - frame.w
 
-  if math.abs(frame.x - screenFrame.x) < 12 then
+  if math.abs(frame.x - screenFrame.x) < constants.edgeSnapThreshold then
     frame.w = newWidth
   else
     frame.x = frame.x - widthDelta
@@ -25,6 +46,36 @@ local function resizeFocusedWindow(delta)
   window:setFrame(frame, 0)
 end
 
+local function shrinkFocusedWindow()
+  resizeFocusedWindow(-constants.resizeStep)
+end
+
+local function growFocusedWindow()
+  resizeFocusedWindow(constants.resizeStep)
+end
+
+local function centerFocusedWindow()
+  local window = hs.window.focusedWindow()
+
+  if not window then
+    return
+  end
+
+  local screen = window:screen()
+
+  if not screen then
+    return
+  end
+
+  layouts.FloatWindowsForManualLayout({ window }, function()
+    window:setFrame(centeredFrameForVisibleScreen(window:frame(), visibleFrameForScreen(screen)), 0)
+  end)
+end
+
 return {
+  centerFocusedWindow = centerFocusedWindow,
+  centeredFrameForVisibleScreen = centeredFrameForVisibleScreen,
   resizeFocusedWindow = resizeFocusedWindow,
+  shrinkFocusedWindow = shrinkFocusedWindow,
+  growFocusedWindow = growFocusedWindow,
 }
