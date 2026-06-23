@@ -1,5 +1,6 @@
 local constants = require("modules.constants")
 local layouts = require("modules.layouts")
+local workspaceLayoutRestore = require("modules.workspace_layout_restore")
 
 local function centeredFrameForVisibleScreen(_, visibleFrame)
   local width = math.floor(visibleFrame.w * 0.70)
@@ -35,6 +36,11 @@ local function resizeFocusedWindow(delta)
 
   local newWidth = math.max(minWidth, math.min(maxWidth, frame.w + delta))
   local widthDelta = newWidth - frame.w
+  if widthDelta == 0 then
+    return
+  end
+
+  workspaceLayoutRestore.clearCurrentWorkspaceLayout()
 
   if math.abs(frame.x - screenFrame.x) < constants.edgeSnapThreshold then
     frame.w = newWidth
@@ -67,6 +73,7 @@ local function centerFocusedWindow()
     return
   end
 
+  workspaceLayoutRestore.clearCurrentWorkspaceLayout()
   layouts.FloatWindowsForManualLayout({ window }, function()
     window:setFrame(centeredFrameForVisibleScreen(window:frame(), visibleFrameForScreen(screen)), 0)
   end)
@@ -85,6 +92,7 @@ local function maximizeFocusedWindow()
     return
   end
 
+  workspaceLayoutRestore.clearCurrentWorkspaceLayout()
   layouts.FloatWindowsForManualLayout({ window }, function()
     window:setFrame(visibleFrameForScreen(screen), 0)
   end)

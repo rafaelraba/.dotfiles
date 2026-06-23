@@ -315,6 +315,30 @@ function M.saveCurrentWorkspaceLayout(layoutName, windowIds)
   return saveState(state)
 end
 
+function M.clearCurrentWorkspaceLayout()
+  generation = generation + 1
+  if restoreTimer then
+    restoreTimer:stop()
+    restoreTimer = nil
+  end
+
+  focusedWorkspaceAsync(function(workspace)
+    if not workspace then
+      return
+    end
+
+    local state = loadState()
+    if not state.workspaces[workspace] then
+      return
+    end
+
+    state.workspaces[workspace] = nil
+    saveState(state)
+  end)
+
+  return true
+end
+
 function M.start()
   if pollTimer then
     return

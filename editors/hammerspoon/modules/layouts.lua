@@ -145,6 +145,14 @@ local function targetScreen()
   return hs.screen.mainScreen()
 end
 
+local function visibleFrameForScreen(screen)
+  if type(screen.visibleFrame) == "function" then
+    return screen:visibleFrame()
+  end
+
+  return screen:frame()
+end
+
 local function windowCenter(window)
   local frame = window:frame()
 
@@ -246,7 +254,7 @@ function StackRightLayoutForIds(windowIds, options)
   local appliedWindowIds = windowIdsForWindows(windows)
 
   applyAfterFloat(windows, function()
-    local screenFrame = windows[1]:screen():frame()
+    local screenFrame = visibleFrameForScreen(windows[1]:screen())
     local leftRatio = constants.leftRatio
     local leftWidth = math.floor((screenFrame.w - gap) * leftRatio)
     local rightWidth = screenFrame.w - leftWidth - gap

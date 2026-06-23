@@ -20,7 +20,7 @@ Then manually reload Hammerspoon:
 Hammerspoon menu bar icon → Reload Config
 ```
 
-Expected result: `Cmd+Alt+1..8` switches AeroSpace workspaces (`1..4` on monitor 1, `5..8` on monitor 2), and Hammerspoon hotkeys apply explicit layouts/actions. Saved layouts are persisted by layout shortcuts but are not auto-restored on workspace switch by default.
+Expected result: `Cmd+Alt+1..8` switches AeroSpace workspaces (`1..4` on monitor 1, `5..8` on monitor 2), and Hammerspoon hotkeys apply explicit layouts/actions. Saved layouts from explicit layout shortcuts are restored on workspace switch, while manual geometry actions clear saved layout state.
 
 ## Required apps, tools, and permissions
 
@@ -154,7 +154,8 @@ Manual Hammerspoon checks:
 - [ ] Hammerspoon menu bar icon is visible.
 - [ ] `Reload Config` completes without console errors.
 - [ ] `Cmd+Alt+S`, `Cmd+Alt+Shift+S`, and `Cmd+Alt+Shift+M` apply layouts and update `$HOME/.cache/dotfiles/wm-layouts/state.json`.
-- [ ] Explicit layout shortcuts still apply and save layouts; workspace switching does not auto-restore layouts by default.
+- [ ] Explicit layout shortcuts still apply and save layouts; workspace switching restores saved explicit layouts.
+- [ ] Manual geometry actions such as center/maximize clear saved layout state so old layouts do not overwrite them.
 - [ ] `Cmd+Alt+1..8` and `Cmd+Alt+Shift+1..8` still work through AeroSpace.
 
 Useful status command:

@@ -19,9 +19,9 @@ M.edgeSnapThreshold = 12
 M.stackRightMaxWindows = 3
 
 -- Workspace layout restore behavior.
-M.workspaceLayoutAutoRestore = false
-M.workspaceLayoutPollInterval = 0.20
-M.workspaceLayoutRestoreDebounce = 0.10
+M.workspaceLayoutAutoRestore = true
+M.workspaceLayoutPollInterval = 0.12
+M.workspaceLayoutRestoreDebounce = 0.05
 M.aerospaceCliTimeout = 1.0
 M.workspaceLayoutStatePath = os.getenv("HOME") .. "/.cache/dotfiles/wm-layouts/state.json"
 M.aerospaceCliCandidates = {}
