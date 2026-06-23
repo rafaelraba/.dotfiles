@@ -10,7 +10,7 @@ This directory is symlinked to `~/.config/aerospace` by `dot self install`.
 - **AeroSpace**: workspace switching, move-node-to-workspace, and reload.
 - **Hammerspoon**: layout presets, per-workspace layout restore, resize, directional focus/move, app launcher, monitor focus/move.
 
-There are no `exec-on-workspace-change` hooks and no AeroSpace-to-Hammerspoon bridge scripts. Hammerspoon may poll the focused AeroSpace workspace and may float target windows immediately before applying manual layouts, but those AeroSpace CLI calls must be async and timeout-protected.
+AeroSpace has a narrow `exec-on-workspace-change` hook only to notify SketchyBar about the focused workspace. There are no AeroSpace-to-Hammerspoon bridge scripts. Hammerspoon may poll the focused AeroSpace workspace and may float target windows immediately before applying manual layouts, but those AeroSpace CLI calls must be async and timeout-protected.
 
 ## Files
 

@@ -20,7 +20,7 @@ Then manually reload Hammerspoon:
 Hammerspoon menu bar icon → Reload Config
 ```
 
-Expected result: `Cmd+Alt+1..8` switches AeroSpace workspaces, and Hammerspoon hotkeys apply explicit layouts/actions. Saved layouts are persisted by layout shortcuts but are not auto-restored on workspace switch by default.
+Expected result: `Cmd+Alt+1..8` switches AeroSpace workspaces (`1..4` on monitor 1, `5..8` on monitor 2), and Hammerspoon hotkeys apply explicit layouts/actions. Saved layouts are persisted by layout shortcuts but are not auto-restored on workspace switch by default.
 
 ## Required apps, tools, and permissions
 
@@ -66,6 +66,7 @@ Key files:
 |------------|-------|-------|
 | Switch workspace `1..8` | AeroSpace | `wm/aerospace/aerospace.toml` |
 | Move focused window to workspace `1..8` | AeroSpace | `wm/aerospace/aerospace.toml` |
+| Assign workspaces `1..4` to monitor 1 and `5..8` to monitor 2 | AeroSpace | `wm/aerospace/aerospace.toml` |
 | Reload AeroSpace config | AeroSpace | `wm/aerospace/aerospace.toml` |
 | Layout presets | Hammerspoon | `editors/hammerspoon/modules/layouts.lua` |
 | Save/restore per-workspace layout | Hammerspoon | `workspace_layout_restore.lua` |
@@ -75,7 +76,8 @@ Key files:
 
 Forbidden patterns:
 
-- Do not add AeroSpace `exec-on-workspace-change` hooks.
+- Keep AeroSpace `exec-on-workspace-change` limited to the SketchyBar workspace highlight event.
+- Do not use AeroSpace workspace-change hooks for Hammerspoon or layout restore bridges.
 - Do not add shell bridge scripts that call `hs -c` from AeroSpace.
 - Do not make AeroSpace own layout, resize, focus, app-launch, or monitor actions.
 - Do not make Hammerspoon synchronously call AeroSpace in hot paths.

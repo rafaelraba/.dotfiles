@@ -227,6 +227,48 @@ check_sketchybar_gap_script_resolution() {
   fi
 }
 
+check_workspace_monitor_assignments() {
+  local file="$1" workspace monitor
+
+  for workspace in 1 2 3 4; do
+    monitor=1
+    if ! grep -Eq "^[[:space:]]*$workspace[[:space:]]*=[[:space:]]*$monitor[[:space:]]*$" "$file"; then
+      error "AeroSpace workspace $workspace must be assigned to monitor $monitor"
+    fi
+  done
+
+  for workspace in 5 6 7 8; do
+    monitor=2
+    if ! grep -Eq "^[[:space:]]*$workspace[[:space:]]*=[[:space:]]*$monitor[[:space:]]*$" "$file"; then
+      error "AeroSpace workspace $workspace must be assigned to monitor $monitor"
+    fi
+  done
+}
+
+check_aerospace_workspace_change_hook() {
+  local file="$1" hooks disallowed
+
+  hooks="$(grep_file_noncomment '^exec-on-workspace-change[[:space:]]*=' "$file")"
+  if [[ -z "$hooks" ]]; then
+    error "AeroSpace must trigger SketchyBar when the focused workspace changes"
+    return
+  fi
+
+  if ! printf '%s\n' "$hooks" | grep -Eq 'sketchybar[[:space:]]+--trigger[[:space:]]+aerospace_workspace_change'; then
+    error "AeroSpace workspace-change hook must trigger SketchyBar aerospace_workspace_change"
+  fi
+
+  if ! printf '%s\n' "$hooks" | grep -Eq 'FOCUSED_WORKSPACE="?\$AEROSPACE_FOCUSED_WORKSPACE"?'; then
+    error "AeroSpace workspace-change hook must pass FOCUSED_WORKSPACE from AEROSPACE_FOCUSED_WORKSPACE"
+  fi
+
+  disallowed="$(printf '%s\n' "$hooks" | grep -v -E 'sketchybar[[:space:]]+--trigger[[:space:]]+aerospace_workspace_change' || true)"
+  if [[ -n "$disallowed" ]]; then
+    echo "$disallowed" >&2
+    error "AeroSpace workspace-change hooks must stay SketchyBar-only"
+  fi
+}
+
 run_active_bridge_regex_self_tests
 
 echo "Checking window-management ownership invariants under $ROOT ..."
@@ -236,7 +278,7 @@ aerospace_config="$ROOT/wm/aerospace/aerospace.toml"
 if [[ -f "$aerospace_config" ]]; then
   check_file "$aerospace_config" 'hammerspoon|/opt/homebrew/bin/hs|\bhs\s' \
     "AeroSpace config must not call Hammerspoon"
-  check_file "$aerospace_config" 'exec-on-workspace-change|workspace-change|on-workspace-change|sync' \
+  check_file "$aerospace_config" '(^|[^-])on-workspace-change|sync' \
     "AeroSpace config must not use workspace-change sync hooks"
   check_file "$aerospace_config" 'cmd[-_]?alt[-_]?d|cmd[-_]?option[-_]?d' \
     "AeroSpace config must not bind Cmd+Option+D"
@@ -245,6 +287,8 @@ if [[ -f "$aerospace_config" ]]; then
   check_file_noncomment "$aerospace_config" 'cmd-alt-shift-b[[:space:]]*=.*exec-and-forget' \
     "AeroSpace must not bind Cmd+Alt+Shift+B to exec-and-forget"
   check_aerospace_bindings "$aerospace_config"
+  check_workspace_monitor_assignments "$aerospace_config"
+  check_aerospace_workspace_change_hook "$aerospace_config"
 fi
 
 # 2. No active Hammerspoon bridge calls in scripts.
