@@ -1,4 +1,4 @@
-# Neovim Configuration - rafaba
+# Neovim Configuration
 
 ## Overview
 

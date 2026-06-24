@@ -1,6 +1,6 @@
 # OPENSPEC:START
 # OpenSpec shell completions configuration
-fpath=("/Users/rafaba/.zsh/completions" $fpath)
+fpath=("$HOME/.zsh/completions" $fpath)
 # OPENSPEC:END
 
 #!/usr/bin/env zsh
@@ -63,4 +63,4 @@ export PATH="$HOME/.local/bin:$PATH"
 export PATH=$HOME/.opencode/bin:$PATH
 
 # Added by Antigravity
-export PATH="/Users/rafaba/.antigravity/antigravity/bin:$PATH"
+export PATH="$HOME/.antigravity/antigravity/bin:$PATH"
