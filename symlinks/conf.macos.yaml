@@ -11,6 +11,7 @@
 - link:
     ~/.config/nvim: editors/nvim
     ~/.config/aerospace/aerospace.toml: editors/aerospace/aerospace.toml
+    ~/.config/sketchybar: editors/sketchybar
     ~/.config/tmux: editors/tmux
     ~/.config/lazygit/config.yml: editors/lazygit/config.yml
     ~/.config/starship.toml: shell/starship.toml

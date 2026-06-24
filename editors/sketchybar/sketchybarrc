@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+
+# Elegant SketchyBar config for AeroSpace workspaces.
+
+CONFIG_DIR="${CONFIG_DIR:-$HOME/.config/sketchybar}"
+PLUGIN_DIR="$CONFIG_DIR/plugins"
+
+BLACK=0xff11111b
+TRANSPARENT=0x00000000
+SURFACE=0x99181825
+SURFACE_SOFT=0x661e1e2e
+OVERLAY=0x88313244
+TEXT=0xffcdd6f4
+MUTED=0xff6c7086
+LAVENDER=0xffb4befe
+MAUVE=0xffcba6f7
+
+sketchybar --bar \
+  position=top \
+  display=1,2 \
+  height=34 \
+  color=$TRANSPARENT \
+  shadow=off \
+  sticky=on \
+  topmost=on \
+  y_offset=0 \
+  margin=0 \
+  padding_left=12 \
+  padding_right=12 \
+  corner_radius=12 \
+  blur_radius=24
+
+sketchybar --default \
+  updates=when_shown \
+  icon.drawing=off \
+  label.font="SF Pro:Semibold:13.0" \
+  label.color=$MUTED \
+  label.padding_left=9 \
+  label.padding_right=9 \
+  padding_left=2 \
+  padding_right=2 \
+  background.drawing=on \
+  background.color=$TRANSPARENT \
+  background.border_width=0 \
+  background.corner_radius=10 \
+  background.height=23
+
+sketchybar --add event aerospace_workspace_change
+
+sketchybar --add bracket spaces.main '/space\.1\..*/' \
+  --set spaces.main \
+    display=1 \
+    background.drawing=on \
+    background.color=$SURFACE_SOFT \
+    background.border_color=$OVERLAY \
+    background.border_width=1 \
+    background.corner_radius=12 \
+    background.height=27 \
+    background.padding_left=6 \
+    background.padding_right=6
+
+sketchybar --add bracket spaces.secondary '/space\.2\..*/' \
+  --set spaces.secondary \
+    display=2 \
+    background.drawing=on \
+    background.color=$SURFACE_SOFT \
+    background.border_color=$OVERLAY \
+    background.border_width=1 \
+    background.corner_radius=12 \
+    background.height=27 \
+    background.padding_left=6 \
+    background.padding_right=6
+
+for sid in 1 2 3 4; do
+  item="space.1.$sid"
+
+  sketchybar --add item "$item" left \
+    --subscribe "$item" aerospace_workspace_change \
+    --set "$item" \
+      label="$sid" \
+      display=1 \
+      click_script="aerospace workspace $sid" \
+      script="$PLUGIN_DIR/aerospace_workspace.sh $sid 1"
+done
+
+for sid in 5 6 7 8; do
+  item="space.2.$sid"
+
+  sketchybar --add item "$item" left \
+    --subscribe "$item" aerospace_workspace_change \
+    --set "$item" \
+      label="$sid" \
+      display=2 \
+      click_script="aerospace workspace $sid" \
+      script="$PLUGIN_DIR/aerospace_workspace.sh $sid 2"
+done
+
+# Paint initial state for both monitors.
+sketchybar --trigger aerospace_workspace_change

@@ -5,7 +5,27 @@ set -euo pipefail
 gap="${1:-8}"
 left_ratio="${2:-0.55}"
 
-window_ids="$(aerospace list-windows --workspace focused --format '%{window-id}')"
+if [[ -n "${AEROSPACE_TOP_GAP:-}" ]]; then
+  top_gap="${AEROSPACE_TOP_GAP}"
+elif command -v sketchybar >/dev/null 2>&1 && [[ "$(sketchybar --query bar 2>/dev/null | /usr/bin/awk -F'\"' '/\"hidden\"/ { print $4; exit }')" == "on" ]]; then
+  top_gap="8"
+else
+  top_gap="42"
+fi
+
+focused_window_id="$(aerospace list-windows --focused --format '%{window-id}' 2>/dev/null || true)"
+workspace_window_ids="$(aerospace list-windows --workspace focused --format '%{window-id}')"
+
+if [[ -n "${focused_window_id}" ]]; then
+  window_ids="${focused_window_id}"
+
+  while IFS= read -r window_id; do
+    [[ -z "${window_id}" || "${window_id}" == "${focused_window_id}" ]] && continue
+    window_ids+=$'\n'"${window_id}"
+  done <<< "${workspace_window_ids}"
+else
+  window_ids="${workspace_window_ids}"
+fi
 
 if [[ -z "${window_ids}" ]]; then
   exit 0
@@ -21,6 +41,7 @@ done <<< "${window_ids}"
 hs -c "
 local gap = tonumber('${gap}') or 8
 local leftRatio = tonumber('${left_ratio}') or 0.55
+local topGap = tonumber('${top_gap}') or 42
 local ids = {}
 
 for id in string.gmatch('${window_ids_csv}', '[^,]+') do
@@ -44,6 +65,8 @@ if #windows > 3 then
 end
 
 local screenFrame = windows[1]:screen():frame()
+screenFrame.y = screenFrame.y + topGap
+screenFrame.h = screenFrame.h - topGap
 local leftWidth = math.floor((screenFrame.w - gap) * leftRatio)
 local rightWidth = screenFrame.w - leftWidth - gap
 
@@ -83,3 +106,5 @@ windows[3]:setFrame({
 
 return 'Applied main-left stack-right layout'
 "
+
+"${HOME}/.dotfiles/scripts/wm/save-visible-window-frames.sh" >/dev/null

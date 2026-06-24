@@ -1,6 +1,6 @@
-# Hammerspoon window management
+# Window management
 
-Hammerspoon is the only window-management runtime in these dotfiles. It owns window geometry, layout presets, focus/move actions, app launch, monitor actions, SketchyBar visibility, and a thin proxy to native macOS Desktop shortcuts.
+This dotfiles setup uses AeroSpace as the window/workspace manager, SketchyBar as the visible workspace bar, and Hammerspoon only for small frame-helper scripts that AeroSpace calls from keybindings.
 
 ## Quick restore path
 
@@ -9,149 +9,153 @@ git clone git@github.com:rafaelraba/.dotfiles.git ~/.dotfiles
 cd ~/.dotfiles
 ./restore.sh
 
-# Validate the standalone Hammerspoon window-management checks.
-luajit test/scripts/hammerspoon-standalone-layouts.lua
-bash test/scripts/wm-invariants.sh
+# Start the apps once, grant permissions, then reload runtime config.
+open -a AeroSpace
+open -a Hammerspoon
+aerospace reload-config
+sketchybar --reload
 ```
 
-Then manually reload Hammerspoon:
+If Homebrew refuses the AeroSpace cask from `nikitabobko/tap` as untrusted, run this once and retry the restore:
 
-```text
-Hammerspoon menu bar icon → Reload Config
+```bash
+brew trust nikitabobko/tap
+brew bundle --file="$HOME/.dotfiles/os/mac/brew/Brewfile" --no-lock
 ```
-
-Expected result: Hammerspoon hotkeys apply explicit layouts/actions without calling external workspace managers. Layout shortcuts apply geometry immediately, but no per-workspace layout state is saved or restored.
 
 ## Required apps, tools, and permissions
 
 | Requirement | Source | Notes |
 |-------------|--------|-------|
-| Hammerspoon | `os/mac/brew/Brewfile` → `cask "hammerspoon"` | Layouts, actions, app launcher, and SketchyBar toggle. |
-| SketchyBar | `os/mac/brew/Brewfile` → `brew "felixkratz/formulae/sketchybar"` | Optional menu bar visibility toggled by Hammerspoon. |
-| Homebrew bundle | `./restore.sh` runs `brew bundle --file=os/mac/brew/Brewfile` | Installs required CLI/apps/fonts. |
-| Accessibility permissions | macOS System Settings | Enable Hammerspoon and Raycast as needed. |
+| AeroSpace | `os/mac/brew/Brewfile` → `cask "nikitabobko/tap/aerospace"` | Workspaces, tiling, focus/move, and workspace-change hooks. |
+| SketchyBar | `os/mac/brew/Brewfile` → `brew "felixkratz/formulae/sketchybar"` | Transparent top workspace bar. |
+| Hammerspoon | `os/mac/brew/Brewfile` → `cask "hammerspoon"` | CLI-accessible frame helpers through `hs -c`. |
+| Accessibility permissions | macOS System Settings | Enable AeroSpace, Hammerspoon, and Raycast. |
 
 Accessibility path:
 
 ```text
 System Settings → Privacy & Security → Accessibility
-→ enable Hammerspoon and Raycast as needed
+→ enable AeroSpace, Hammerspoon, and Raycast
 ```
 
-Without Accessibility permissions, hotkeys and window moves may silently fail.
-
-## Dotfiles and symlink paths
-
-`dot self install` creates the Hammerspoon symlink from `symlinks/conf.macos.yaml`:
-
-| Repo path | Target path | Owner |
-|-----------|-------------|-------|
-| `editors/hammerspoon` | `~/.hammerspoon` | Hammerspoon config/modules. |
-
-Key files:
-
-| File | Purpose |
-|------|---------|
-| `editors/hammerspoon/init.lua` | Hammerspoon entrypoint. |
-| `editors/hammerspoon/modules/hotkeys.lua` | All Hammerspoon-owned hotkeys. |
-| `editors/hammerspoon/modules/layouts.lua` | Layout preset implementations. |
-| `editors/hammerspoon/modules/workspace_layout_restore.lua` | Deprecated no-op compatibility module; not started at runtime. |
-| `editors/hammerspoon/modules/constants.lua` | Shared geometry constants. |
-| `scripts/wm/toggle-sketchybar.sh` | Deterministic SketchyBar visibility toggle. |
+Without Accessibility permissions, hotkeys and window frame changes may silently fail.
 
 ## Ownership model
 
 | Capability | Owner | Where |
 |------------|-------|-------|
-| Layout presets | Hammerspoon | `editors/hammerspoon/modules/layouts.lua` |
-| Resize, center, directional focus/move | Hammerspoon | `resize.lua`, `focus.lua`, `hotkeys.lua` |
-| App launcher | Hammerspoon | `hotkeys.lua` |
-| Monitor focus/move | Hammerspoon | `focus.lua`, `hotkeys.lua` |
-| Desktop/workspace model | macOS Spaces | Native macOS behavior; Hammerspoon proxies `Cmd+Alt+1..0` to Mission Control `Ctrl+1..0`. |
+| Workspace model | AeroSpace | `editors/aerospace/aerospace.toml` |
+| Workspace indicators | SketchyBar | `editors/sketchybar/sketchybarrc` |
+| Per-monitor workspace highlight | SketchyBar plugin | `editors/sketchybar/plugins/aerospace_workspace.sh` |
+| Tiling layouts | AeroSpace | Native AeroSpace commands. |
+| Explicit floating layouts | AeroSpace keybindings + Hammerspoon frame helpers | `scripts/wm/*.sh` |
+| SketchyBar top-gap reflow | Shell + Hammerspoon | `toggle-sketchybar.sh`, `ensure-visible-windows-top-gap.sh` |
 
-Known tradeoff: native macOS Spaces do not provide deterministic repo-managed workspace IDs, workspace-to-monitor assignment, or move-to-workspace shortcuts. Mission Control `Switch to Desktop 1..10` shortcuts must be enabled in System Settings.
+Important rule: do not use Hammerspoon as a competing workspace manager. It is only used here because AeroSpace does not provide all explicit floating frame geometry needed for the custom layouts.
 
-Forbidden patterns:
+## Symlinked paths
 
-- Do not add runtime calls to external workspace-manager CLIs.
-- Do not restore Hammerspoon layouts by workspace.
-- Do not make the SketchyBar toggle edit or reload any window-manager config.
+`dot self install` creates these macOS symlinks from `symlinks/conf.macos.yaml`:
+
+| Repo path | Target path |
+|-----------|-------------|
+| `editors/aerospace/aerospace.toml` | `~/.config/aerospace/aerospace.toml` |
+| `editors/sketchybar` | `~/.config/sketchybar` |
+| `editors/hammerspoon` | `~/.hammerspoon` |
+
+## Workspace and monitor model
+
+The current setup assumes two monitors and keeps workspaces deterministic:
+
+| Monitor | Workspaces |
+|---------|------------|
+| `1` | `1`, `2`, `3`, `4` |
+| `2` | `5`, `6`, `7`, `8` |
+
+This is configured with AeroSpace `workspace-to-monitor-force-assignment`.
 
 ## Hotkeys
 
-### Hammerspoon-owned layout/action keys
-
 | Hotkey | Action |
 |--------|--------|
+| `Cmd+Alt+/` | Tile focused workspace horizontally. |
+| `Cmd+Alt+Shift+/` | Tile focused workspace vertically. |
+| `Cmd+Alt+S` | Apply main-left/stack-right floating layout and save visible frames. |
+| `Cmd+Alt+,` | Toggle AeroSpace accordion layout. |
 | `Cmd+Alt+H/J/K/L` | Focus window left/down/up/right. |
 | `Cmd+Alt+Shift+H/J/K/L` | Move focused window left/down/up/right. |
-| `Cmd+Alt+-` | Shrink focused window width. |
-| `Cmd+Alt+=` | Grow focused window width. |
-| `Cmd+Alt+M` | Center focused window. |
-| `Cmd+Alt+F` | Maximize focused window to the visible screen frame. |
-| `Cmd+Alt+S` | Apply `stack-right` layout. |
-| `Cmd+Alt+Shift+S` | Apply `columns` layout. |
-| `Cmd+Alt+Shift+M` | Apply `center-main` layout. |
-| `Cmd+Alt+Shift+B` | Toggle SketchyBar visibility only. |
-| `Cmd+Alt+Tab` | Focus next monitor. |
-| `Cmd+Alt+Shift+Tab` | Move focused window to next monitor. |
+| `Cmd+Alt+-` | Floating center resize at 50% width / 75% height. |
+| `Cmd+Alt+=` | Floating center resize at 66% width / 85% height. |
+| `Cmd+Alt+M` | Floating center resize at 78% width / 90% height. |
+| `Cmd+Alt+F` | Maximize focused window inside the current top gap. |
+| `Cmd+Alt+1..8` | Switch AeroSpace workspace. |
+| `Cmd+Alt+Shift+1..8` | Move focused window to workspace. |
+| `Cmd+Alt+Tab` | Workspace back-and-forth. |
+| `Cmd+Alt+Shift+Tab` | Move current workspace to next monitor. |
 
-### Native macOS Desktop keys
+## Floating frame restore behavior
 
-These require Mission Control shortcuts `Ctrl+1..Ctrl+0` to be enabled in macOS System Settings.
+`Cmd+Alt+S` converts the focused workspace windows to floating and creates the main-left/stack-right layout. The frame state lives in:
 
-| Hotkey | Action |
-|--------|--------|
-| `Cmd+Alt+1..9` | Switch to native macOS Desktop 1..9. |
-| `Cmd+Alt+0` | Switch to native macOS Desktop 10. |
+```text
+${XDG_CACHE_HOME:-$HOME/.cache}/aerospace-window-frames.tsv
+```
 
-### Hammerspoon app launcher keys
+The restore pipeline is intentionally defensive:
 
-| Hotkey | App |
-|--------|-----|
-| `Cmd+Alt+Return` | Ghostty |
-| `Cmd+Alt+O` | Obsidian |
-| `Cmd+Alt+B` | Safari |
-| `Cmd+Alt+C` | Visual Studio Code |
+1. `save-visible-window-frames.sh` saves frames only for `aerospace list-windows --workspace visible`.
+2. `restore-visible-window-frames.sh` runs on AeroSpace workspace changes.
+3. Restore ignores stale saved frames that are mostly offscreen.
+4. Restore rechecks the current SketchyBar top gap before applying frames.
+5. Restore resolves same-column overlaps after top-gap changes.
 
-If a new machine uses different app names, update only the `apps` table in `editors/hammerspoon/modules/hotkeys.lua`.
+This avoids a subtle integration bug: AeroSpace-hidden windows can still appear in Hammerspoon `hs.window.visibleWindows()` with offscreen coordinates. Do not use Hammerspoon visibility alone as the source of truth.
 
-## Layout restore behavior
+## SketchyBar top gap
 
-Per-workspace layout restore is disabled. `workspace_layout_restore.lua` remains as a deprecated no-op compatibility module, but `init.lua` does not start it and hotkeys do not save layout state. Explicit shortcuts still apply layouts to the current visible windows using direct Hammerspoon frame APIs.
+The top gap is dynamic:
+
+| SketchyBar state | AeroSpace `outer.top` | Reason |
+|------------------|-----------------------|--------|
+| Visible | `42` | Reserve room for the top workspace bar. |
+| Hidden | `8` | Reclaim the screen area while keeping a small gap. |
+
+`toggle-sketchybar.sh` updates the AeroSpace config, reloads AeroSpace, and runs `ensure-visible-windows-top-gap.sh`. That script scales stacked vertical columns proportionally so windows do not overlap when the bar appears or disappears.
 
 ## Verification checklist
 
-Run these from `~/.dotfiles`:
+Run these after restore or after changing window-management files:
 
 ```bash
-luajit test/scripts/hammerspoon-standalone-layouts.lua
-bash test/scripts/wm-invariants.sh
+zsh -n scripts/wm/*.sh
+aerospace reload-config
+sketchybar --reload
 ```
 
-Manual Hammerspoon checks:
+Manual checks:
 
-- [ ] Hammerspoon menu bar icon is visible.
-- [ ] `Reload Config` completes without console errors.
-- [ ] `Cmd+Alt+S`, `Cmd+Alt+Shift+S`, and `Cmd+Alt+Shift+M` apply layouts without creating/updating workspace restore state.
-- [ ] Mission Control `Switch to Desktop 1..10` shortcuts are enabled as `Ctrl+1..Ctrl+0`.
-- [ ] `Cmd+Alt+1..0` switches native macOS Desktops through Hammerspoon.
-- [ ] Center/maximize/focus/move/app launcher hotkeys still work.
-- [ ] `Cmd+Alt+Shift+B` toggles SketchyBar visibility without editing or reloading any window-manager config.
+- [ ] `Cmd+Alt+S` creates the main-left/stack-right floating layout.
+- [ ] Switching workspaces and returning restores the same visible frames.
+- [ ] No window disappears offscreen after workspace changes.
+- [ ] SketchyBar visible state keeps windows below the bar.
+- [ ] SketchyBar hidden state reclaims top space without overlap.
+- [ ] Workspace indicators highlight the visible workspace on each monitor.
 
 ## Troubleshooting
 
 | Symptom | Check | Fix |
 |---------|-------|-----|
-| Hotkeys do nothing | Accessibility permissions | Enable Hammerspoon and Raycast in Accessibility. Restart apps if needed. |
-| Hammerspoon keys fail | Config reload/status | Use Hammerspoon menu → `Reload Config`; inspect Hammerspoon Console for Lua errors. |
-| Layouts do not move windows | Too few windows or wrong focused screen | Use at least two visible windows on the current screen. |
-| Multi-monitor layout applies on wrong screen | Focus/current screen | Focus a window on the intended monitor before applying the layout. |
+| AeroSpace hotkeys do nothing | Accessibility permissions and app state | Enable AeroSpace in Accessibility, then run `aerospace reload-config`. |
+| SketchyBar does not show workspaces | Symlink and service | Verify `~/.config/sketchybar`, then run `sketchybar --reload` or `brew services restart sketchybar`. |
+| Window disappears after workspace change | Frame cache and visible window source | Remove `~/.cache/aerospace-window-frames.tsv`, reapply `Cmd+Alt+S`, and switch workspaces again. |
+| Windows overlap when toggling the bar | Top-gap enforcement | Run `scripts/wm/ensure-visible-windows-top-gap.sh`; verify AeroSpace `outer.top` is `42` when visible and `8` when hidden. |
+| Wrong workspace appears on wrong monitor | Monitor assignment | Check `[workspace-to-monitor-force-assignment]` in `editors/aerospace/aerospace.toml`. |
 
 ## Agent notes
 
-- Keep Hammerspoon as the only window-management runtime.
-- Safe extension points are Hammerspoon modules, new tests under `test/scripts/`, and docs under `doc/`.
-- If adding a layout, update `layouts.lua`, `hotkeys.lua`, tests, and this document.
-- If adding a new app launcher binding, update only the Hammerspoon `apps` table unless the app also needs Brewfile installation.
-- Always run `bash test/scripts/wm-invariants.sh` after changing window-management behavior.
+- Keep AeroSpace as the owner of workspaces and tiling behavior.
+- Keep SketchyBar as a visual indicator only; it should not own workspace state.
+- Hammerspoon helpers may set explicit frames, but should not become a second workspace manager.
+- When changing top-gap behavior, update both `restore-visible-window-frames.sh` and `ensure-visible-windows-top-gap.sh`.
+- When changing workspace IDs or monitor assignment, update AeroSpace config, SketchyBar items, and this document together.
