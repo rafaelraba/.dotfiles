@@ -90,9 +90,11 @@ This is configured with AeroSpace `workspace-to-monitor-force-assignment`.
 | `Cmd+Alt+M` | Floating center resize at 78% width / 90% height. |
 | `Cmd+Alt+F` | Maximize focused window inside the current top gap. |
 | `Cmd+Alt+1..8` | Switch AeroSpace workspace. |
-| `Cmd+Alt+Shift+1..8` | Move focused window to workspace. |
+| `Cmd+Alt+Shift+1..8` | Move focused window to workspace, follow it, and scale/contain floating frames on the target monitor. |
 | `Cmd+Alt+Tab` | Workspace back-and-forth. |
 | `Cmd+Alt+Shift+Tab` | Move current workspace to next monitor. |
+| `Ctrl+Alt+Cmd+H/L` | Focus monitor left/right. |
+| `Ctrl+Alt+Cmd+Shift+H/L` | Move focused window to monitor left/right and scale/contain it inside the target screen. |
 
 ## Floating frame restore behavior
 

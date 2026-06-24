@@ -212,6 +212,15 @@ local function resolveColumnOverlaps(group)
   end
 end
 
+local function framesAreEquivalent(frameA, frameB)
+  local tolerance = 2
+
+  return math.abs(frameA.x - frameB.x) <= tolerance
+    and math.abs(frameA.y - frameB.y) <= tolerance
+    and math.abs(frameA.w - frameB.w) <= tolerance
+    and math.abs(frameA.h - frameB.h) <= tolerance
+end
+
 for _, record in ipairs(records) do
   local group = groups[record.screenKey]
   local frame = record.frame
@@ -237,7 +246,9 @@ for _, group in pairs(groups) do
 end
 
 for _, record in ipairs(records) do
-  record.window:setFrame(record.frame, 0)
+  if not framesAreEquivalent(record.window:frame(), record.frame) then
+    record.window:setFrame(record.frame, 0)
+  end
 end
 
 return 'Ensured visible windows top gap ' .. tostring(topGap)

@@ -50,19 +50,13 @@ local function frameIntersectionArea(frameA, frameB)
   return (x2 - x1) * (y2 - y1)
 end
 
-local function frameIsOnAnyScreen(frame)
+local function frameIsOnScreen(frame, screen)
   local area = frame.w * frame.h
   if area <= 0 then
     return false
   end
 
-  for _, screen in ipairs(hs.screen.allScreens()) do
-    if frameIntersectionArea(frame, screen:frame()) >= area * 0.25 then
-      return true
-    end
-  end
-
-  return false
+  return frameIntersectionArea(frame, screen:frame()) >= area * 0.25
 end
 
 local function screenKey(screen)
@@ -132,33 +126,31 @@ for line in file:lines() do
         h = tonumber(h),
       }
 
-      if frameIsOnAnyScreen(frame) then
-        local screen = window:screen()
+      local screen = window:screen()
 
-        if screen then
-          local key = screenKey(screen)
-          local group = groups[key]
+      if screen and frameIsOnScreen(frame, screen) then
+        local key = screenKey(screen)
+        local group = groups[key]
 
-          if not group then
-            group = {
-              screenFrame = screen:frame(),
-              minY = frame.y,
-              records = {},
-            }
-            groups[key] = group
-          else
-            group.minY = math.min(group.minY, frame.y)
-          end
-
-          local record = {
-            window = window,
-            frame = frame,
-            screenKey = key,
+        if not group then
+          group = {
+            screenFrame = screen:frame(),
+            minY = frame.y,
+            records = {},
           }
-
-          table.insert(records, record)
-          table.insert(group.records, record)
+          groups[key] = group
+        else
+          group.minY = math.min(group.minY, frame.y)
         end
+
+        local record = {
+          window = window,
+          frame = frame,
+          screenKey = key,
+        }
+
+        table.insert(records, record)
+        table.insert(group.records, record)
       end
     end
   end
@@ -260,6 +252,15 @@ local function resolveColumnOverlaps(group)
   end
 end
 
+local function framesAreEquivalent(frameA, frameB)
+  local tolerance = 2
+
+  return math.abs(frameA.x - frameB.x) <= tolerance
+    and math.abs(frameA.y - frameB.y) <= tolerance
+    and math.abs(frameA.w - frameB.w) <= tolerance
+    and math.abs(frameA.h - frameB.h) <= tolerance
+end
+
 for _, record in ipairs(records) do
   local group = groups[record.screenKey]
   local frame = record.frame
@@ -285,7 +286,9 @@ for _, group in pairs(groups) do
 end
 
 for _, record in ipairs(records) do
-  record.window:setFrame(record.frame, 0)
+  if not framesAreEquivalent(record.window:frame(), record.frame) then
+    record.window:setFrame(record.frame, 0)
+  end
 end
 
 return 'Restored visible saved window frames'

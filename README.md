@@ -92,7 +92,9 @@ Current workspace model:
 - Workspaces `1..4` are forced to monitor `1`.
 - Workspaces `5..8` are forced to monitor `2`.
 - `Cmd+Alt+1..8` switches workspaces.
-- `Cmd+Alt+Shift+1..8` moves the focused window to a workspace.
+- `Cmd+Alt+Shift+1..8` moves the focused window to a workspace, follows it, and scales/contains floating frames on the target monitor.
+- `Ctrl+Alt+Cmd+H/L` focuses the monitor to the left/right.
+- `Ctrl+Alt+Cmd+Shift+H/L` moves the focused window to the left/right monitor and scales/contains it inside the target screen.
 - `Cmd+Alt+S` applies the custom floating stack layout and persists visible frames.
 
 The top gap is dynamic:
