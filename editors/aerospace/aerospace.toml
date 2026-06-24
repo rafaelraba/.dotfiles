@@ -1,0 +1,100 @@
+# AeroSpace owns window management: layouts, focus/move, resize, workspaces, and monitor movement.
+# Hammerspoon is intentionally kept out of these shortcuts to avoid global hotkey conflicts.
+
+config-version = 2
+start-at-login = true
+
+after-startup-command = []
+
+enable-normalization-flatten-containers = true
+enable-normalization-opposite-orientation-for-nested-containers = true
+
+accordion-padding = 30
+default-root-container-layout = 'tiles'
+default-root-container-orientation = 'auto'
+
+on-focused-monitor-changed = ['move-mouse monitor-lazy-center']
+automatically-unhide-macos-hidden-apps = false
+
+persistent-workspaces = ['1', '2', '3', '4', '5', '6', '7', '8', '9']
+
+[key-mapping]
+    preset = 'qwerty'
+
+[gaps]
+    inner.horizontal = 8
+    inner.vertical = 8
+    outer.left = 8
+    outer.bottom = 8
+    outer.top = 8
+    outer.right = 8
+
+[mode.main.binding]
+    # Layouts
+    cmd-alt-slash = 'layout tiles horizontal vertical'
+    cmd-alt-comma = 'layout accordion horizontal vertical'
+
+    # Focus
+    cmd-alt-h = 'focus left'
+    cmd-alt-j = 'focus down'
+    cmd-alt-k = 'focus up'
+    cmd-alt-l = 'focus right'
+
+    # Move windows inside the workspace tree
+    cmd-alt-shift-h = 'move left'
+    cmd-alt-shift-j = 'move down'
+    cmd-alt-shift-k = 'move up'
+    cmd-alt-shift-l = 'move right'
+
+    # Single-window floating resize delegated to a small Hammerspoon CLI helper.
+    # AeroSpace resize works on tiling splits; this handles explicit width + height geometry.
+    cmd-alt-minus = ['layout floating', 'exec-and-forget /Users/rafaba/.dotfiles/scripts/wm/center-focused-window.sh 0.50 0.75']
+    cmd-alt-equal = ['layout floating', 'exec-and-forget /Users/rafaba/.dotfiles/scripts/wm/center-focused-window.sh 0.66 0.85']
+
+    # Floating window actions delegated to Rectangle Pro.
+    # AeroSpace owns tiling; Rectangle owns single-window floating placement.
+    cmd-alt-m = ['layout floating', 'exec-and-forget /Users/rafaba/.dotfiles/scripts/wm/center-focused-window.sh 0.78 0.90']
+    cmd-alt-f = ['layout floating', 'exec-and-forget open -g "rectangle-pro://execute-action?name=maximize"']
+
+    # Workspaces
+    cmd-alt-1 = 'workspace 1'
+    cmd-alt-2 = 'workspace 2'
+    cmd-alt-3 = 'workspace 3'
+    cmd-alt-4 = 'workspace 4'
+    cmd-alt-5 = 'workspace 5'
+    cmd-alt-6 = 'workspace 6'
+    cmd-alt-7 = 'workspace 7'
+    cmd-alt-8 = 'workspace 8'
+    cmd-alt-9 = 'workspace 9'
+
+    # Move focused window to workspace
+    cmd-alt-shift-1 = 'move-node-to-workspace 1'
+    cmd-alt-shift-2 = 'move-node-to-workspace 2'
+    cmd-alt-shift-3 = 'move-node-to-workspace 3'
+    cmd-alt-shift-4 = 'move-node-to-workspace 4'
+    cmd-alt-shift-5 = 'move-node-to-workspace 5'
+    cmd-alt-shift-6 = 'move-node-to-workspace 6'
+    cmd-alt-shift-7 = 'move-node-to-workspace 7'
+    cmd-alt-shift-8 = 'move-node-to-workspace 8'
+    cmd-alt-shift-9 = 'move-node-to-workspace 9'
+
+    cmd-alt-tab = 'workspace-back-and-forth'
+    cmd-alt-shift-tab = 'move-workspace-to-monitor --wrap-around next'
+
+    # Service mode
+    cmd-alt-shift-semicolon = 'mode service'
+
+[mode.service.binding]
+    esc = ['reload-config', 'mode main']
+    r = ['flatten-workspace-tree', 'mode main']
+    b = ['balance-sizes', 'mode main']
+    f = ['layout floating tiling', 'mode main']
+    backspace = ['close-all-windows-but-current', 'mode main']
+
+    minus = ['resize smart -50', 'mode main']
+    equal = ['resize smart +50', 'mode main']
+
+    cmd-alt-shift-h = ['join-with left', 'mode main']
+    cmd-alt-shift-j = ['join-with down', 'mode main']
+    cmd-alt-shift-k = ['join-with up', 'mode main']
+    cmd-alt-shift-l = ['join-with right', 'mode main']
