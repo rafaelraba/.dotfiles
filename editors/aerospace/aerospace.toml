@@ -31,14 +31,16 @@ persistent-workspaces = ['1', '2', '3', '4', '5', '6', '7', '8', '9']
 
 [mode.main.binding]
     # Layouts
-    cmd-alt-slash = 'layout tiles horizontal vertical'
+    cmd-alt-slash = 'exec-and-forget /Users/rafaba/.dotfiles/scripts/wm/tile-focused-workspace.sh horizontal'
+    cmd-alt-shift-slash = 'exec-and-forget /Users/rafaba/.dotfiles/scripts/wm/tile-focused-workspace.sh vertical'
+    cmd-alt-s = 'exec-and-forget /Users/rafaba/.dotfiles/scripts/wm/stack-right-focused-workspace.sh'
     cmd-alt-comma = 'layout accordion horizontal vertical'
 
     # Focus
-    cmd-alt-h = 'focus left'
-    cmd-alt-j = 'focus down'
-    cmd-alt-k = 'focus up'
-    cmd-alt-l = 'focus right'
+    cmd-alt-h = 'exec-and-forget /Users/rafaba/.dotfiles/scripts/wm/focus-window-direction.sh left'
+    cmd-alt-j = 'exec-and-forget /Users/rafaba/.dotfiles/scripts/wm/focus-window-direction.sh down'
+    cmd-alt-k = 'exec-and-forget /Users/rafaba/.dotfiles/scripts/wm/focus-window-direction.sh up'
+    cmd-alt-l = 'exec-and-forget /Users/rafaba/.dotfiles/scripts/wm/focus-window-direction.sh right'
 
     # Move windows inside the workspace tree
     cmd-alt-shift-h = 'move left'
