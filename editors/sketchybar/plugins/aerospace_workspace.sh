@@ -13,15 +13,20 @@ if [ "$workspace" = "$visible" ]; then
     label.color=0xff11111b \
     label.font="SF Pro:Bold:13.0" \
     background.drawing=on \
-    background.color=0xffb4befe \
-    background.border_color=0x99cba6f7 \
-    background.border_width=1
+    background.color=0xff89b4fa \
+    background.border_color=0xffb4befe \
+    background.border_width=1 \
+    background.shadow.drawing=on \
+    background.shadow.color=0x8889b4fa \
+    background.shadow.angle=270 \
+    background.shadow.distance=3
 else
   sketchybar --set "$NAME" \
     label.color=0xff9399b2 \
     label.font="SF Pro:Semibold:13.0" \
     background.drawing=on \
-    background.color=0x00181825 \
-    background.border_color=0x00000000 \
-    background.border_width=0
+    background.color=0x2220202a \
+    background.border_color=0x33454a5f \
+    background.border_width=1 \
+    background.shadow.drawing=off
 fi

@@ -5,45 +5,44 @@
 CONFIG_DIR="${CONFIG_DIR:-$HOME/.config/sketchybar}"
 PLUGIN_DIR="$CONFIG_DIR/plugins"
 
-BLACK=0xff11111b
 TRANSPARENT=0x00000000
-SURFACE=0x99181825
-SURFACE_SOFT=0x661e1e2e
-OVERLAY=0x88313244
+SURFACE=0x8f181825
+OVERLAY=0x88454a5f
 TEXT=0xffcdd6f4
 MUTED=0xff6c7086
 LAVENDER=0xffb4befe
 MAUVE=0xffcba6f7
+PINK=0xfff5c2e7
 
 sketchybar --bar \
   position=top \
   display=1,2 \
-  height=34 \
+  height=36 \
   color=$TRANSPARENT \
   shadow=off \
   sticky=on \
   topmost=on \
   y_offset=0 \
   margin=0 \
-  padding_left=12 \
-  padding_right=12 \
-  corner_radius=12 \
-  blur_radius=24
+  padding_left=14 \
+  padding_right=14 \
+  corner_radius=14 \
+  blur_radius=28
 
 sketchybar --default \
   updates=when_shown \
   icon.drawing=off \
   label.font="SF Pro:Semibold:13.0" \
   label.color=$MUTED \
-  label.padding_left=9 \
-  label.padding_right=9 \
+  label.padding_left=10 \
+  label.padding_right=10 \
   padding_left=2 \
   padding_right=2 \
   background.drawing=on \
   background.color=$TRANSPARENT \
   background.border_width=0 \
-  background.corner_radius=10 \
-  background.height=23
+  background.corner_radius=11 \
+  background.height=24
 
 sketchybar --add event aerospace_workspace_change
 
@@ -51,25 +50,25 @@ sketchybar --add bracket spaces.main '/space\.1\..*/' \
   --set spaces.main \
     display=1 \
     background.drawing=on \
-    background.color=$SURFACE_SOFT \
+    background.color=$SURFACE \
     background.border_color=$OVERLAY \
     background.border_width=1 \
-    background.corner_radius=12 \
-    background.height=27 \
-    background.padding_left=6 \
-    background.padding_right=6
+    background.corner_radius=13 \
+    background.height=28 \
+    background.padding_left=7 \
+    background.padding_right=7
 
 sketchybar --add bracket spaces.secondary '/space\.2\..*/' \
   --set spaces.secondary \
     display=2 \
     background.drawing=on \
-    background.color=$SURFACE_SOFT \
+    background.color=$SURFACE \
     background.border_color=$OVERLAY \
     background.border_width=1 \
-    background.corner_radius=12 \
-    background.height=27 \
-    background.padding_left=6 \
-    background.padding_right=6
+    background.corner_radius=13 \
+    background.height=28 \
+    background.padding_left=7 \
+    background.padding_right=7
 
 for sid in 1 2 3 4; do
   item="space.1.$sid"

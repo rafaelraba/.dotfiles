@@ -26,10 +26,14 @@ echo "Checking clean window-management invariants under $ROOT ..."
 if [[ ! -f "$aerospace_config" ]]; then
   error "AeroSpace config missing: $aerospace_config"
 else
-  matches="$(grep_noncomment 'scripts/wm|raycast://' "$aerospace_config")"
+  matches="$(grep_noncomment 'raycast://' "$aerospace_config")"
   if [[ -n "$matches" ]]; then
     printf '%s\n' "$matches" >&2
-    error "AeroSpace config must stay native and must not call helper scripts or external geometry tools"
+    error "AeroSpace config must not call Raycast or external geometry tools"
+  fi
+
+  if ! grep -Eq "alt-b[[:space:]]*=[[:space:]]*'exec-and-forget.*toggle-sketchybar\.sh" "$aerospace_config"; then
+    error "AeroSpace must expose Alt+B to toggle the workspace bar"
   fi
 
   if ! grep -Eq "alt-shift-semicolon[[:space:]]*=[[:space:]]*'mode service'" "$aerospace_config"; then
@@ -66,10 +70,12 @@ if [[ -d "$hammerspoon_dir/modules" ]]; then
 fi
 
 if [[ -f "$toggle_sketchybar" ]]; then
-  matches="$(grep_noncomment 'aerospace|AEROSPACE_|ensure-visible-windows-top-gap' "$toggle_sketchybar")"
-  if [[ -n "$matches" ]]; then
-    printf '%s\n' "$matches" >&2
-    error "SketchyBar toggle must not mutate AeroSpace config or window geometry"
+  if ! grep -Eq 'VISIBLE_TOP_GAP=60' "$toggle_sketchybar"; then
+    error "SketchyBar toggle must reserve the visible top gap"
+  fi
+
+  if ! grep -Eq 'HIDDEN_TOP_GAP=24' "$toggle_sketchybar"; then
+    error "SketchyBar toggle must reclaim the hidden top gap"
   fi
 else
   error "SketchyBar toggle script missing: $toggle_sketchybar"

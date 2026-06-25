@@ -50,9 +50,10 @@ After `restore.sh`:
 
 1. **AeroSpace**: open the app once, grant Accessibility permissions, then run `aerospace reload-config`.
 2. **SketchyBar**: start or reload it with `brew services restart sketchybar` or `sketchybar --reload`.
-3. **Hammerspoon**: open the app once, grant Accessibility permissions, then reload config.
-4. **Raycast**: configure Window Management in the app and import/export Raycast settings when moving between machines.
-5. **Ghostty**: in Settings, use `JetBrainsMono Nerd Font` or `IosevkaTerm Nerd Font`.
+3. **JankyBorders**: installed as `borders`; AeroSpace starts it automatically with a rounded periwinkle focused-window border.
+4. **Hammerspoon**: open the app once, grant Accessibility permissions, then reload config.
+5. **Raycast**: configure Window Management in the app and import/export Raycast settings when moving between machines.
+6. **Ghostty**: in Settings, use `JetBrainsMono Nerd Font` or `IosevkaTerm Nerd Font`.
 
 ## Accessibility permissions
 
@@ -73,8 +74,9 @@ This setup is intentionally simple and split by responsibility:
 |---------|----------------|
 | AeroSpace | Workspaces, tiling tree, default focus/move/resize hotkeys, monitor assignment, workspace-change SketchyBar trigger. |
 | Hammerspoon | Global keyboard input helpers only. No windows, layouts, workspaces, or app launchers. |
+| JankyBorders | Rounded focused-window highlight (`#89b4fa`, width `7.0`). |
 | Raycast | One-shot centered floating-window placement and sizing. |
-| SketchyBar | Transparent top workspace bar with per-monitor workspace indicators. |
+| SketchyBar | Elegant top workspace bar with per-monitor workspace indicators. |
 
 Important restore files:
 
@@ -84,7 +86,13 @@ Important restore files:
 | `editors/hammerspoon` | `~/.hammerspoon`, global input helpers only. |
 | `editors/raycast/README.md` | Raycast restore, hotkey, and export/import guidance. |
 | `editors/sketchybar` | `~/.config/sketchybar` |
-| `scripts/wm/toggle-sketchybar.sh` | Toggles SketchyBar only. |
+| `scripts/wm/toggle-sketchybar.sh` | Toggles SketchyBar and updates AeroSpace's top gap. |
+
+Visual defaults:
+
+- Focus border: JankyBorders `style=round`, `width=7.0`, active color `#89b4fa`.
+- AeroSpace gaps: inner `20px`, outer left/right `28px`, bottom `24px`.
+- SketchyBar top gap: `60px` when visible, `24px` when hidden.
 
 Current workspace model:
 
@@ -94,6 +102,7 @@ Current workspace model:
 - `Alt+Shift+1..8` moves the focused window to a workspace and follows it.
 - `Alt+H/J/K/L` focuses windows.
 - `Alt+Shift+H/J/K/L` moves windows.
+- `Alt+B` toggles the workspace bar; windows move below it when shown and reclaim the space when hidden.
 - `Alt+Shift+;`, then `F`, toggles the focused window between floating and tiling.
 - Use a Raycast Window Management command for explicit centered floating placement.
 
@@ -108,7 +117,8 @@ Current workspace model:
 - [ ] Hammerspoon global input shortcuts work: `Ctrl+Option+N` → `ñ`, `Ctrl+Option+Shift+N` → `Ñ`, `Ctrl+Option+E` then vowel → accented vowel.
 - [ ] `Alt+Shift+;`, then `F`, toggles a focused window between floating and tiling.
 - [ ] Your Raycast window-management shortcut centers a floating window.
-- [ ] Toggling SketchyBar does not modify AeroSpace config.
+- [ ] `Alt+B` shows/hides SketchyBar and adjusts the AeroSpace top gap.
+- [ ] The focused window has a rounded periwinkle border from `borders`.
 - [ ] `nvim` opens without plugin errors.
 - [ ] `tmux` starts and the prefix is `Ctrl+a`.
 - [ ] `lazygit` opens.

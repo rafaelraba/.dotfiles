@@ -5,7 +5,8 @@ This setup keeps window management intentionally simple:
 - **AeroSpace** owns workspaces, tiling, focus, move, resize, and floating/tiling state.
 - **Raycast** centers or resizes a floating window with native Window Management commands.
 - **Hammerspoon** owns global keyboard input helpers only; it does not manage windows.
-- **SketchyBar** only displays workspace state.
+- **SketchyBar** displays workspace state and its toggle adjusts the AeroSpace top gap so windows never sit under the bar.
+- **JankyBorders** highlights the focused window with a rounded periwinkle active border.
 
 ## Quick restore path
 
@@ -35,8 +36,18 @@ brew bundle --file="$HOME/.dotfiles/os/mac/brew/Brewfile" --no-lock
 |-------------|--------|-------|
 | AeroSpace | `os/mac/brew/Brewfile` → `cask "nikitabobko/tap/aerospace"` | Workspaces and tiling. |
 | SketchyBar | `os/mac/brew/Brewfile` → `brew "felixkratz/formulae/sketchybar"` | Workspace bar. |
+| JankyBorders | `os/mac/brew/Brewfile` → `brew "felixkratz/formulae/borders"` | Focused-window border. |
 | Hammerspoon | `os/mac/brew/Brewfile` → `cask "hammerspoon"` | Global input helpers only. |
 | Raycast | `os/mac/brew/Brewfile` → `cask "raycast"` | Centered floating-window placement. |
+
+## Visual defaults
+
+| Area | Value |
+|------|-------|
+| Focus border | JankyBorders `style=round`, `width=7.0`, color `#89b4fa`. |
+| Workspace active color | SketchyBar active workspace pill `#89b4fa`. |
+| Window gaps | AeroSpace inner `20px`, outer left/right `28px`, bottom `24px`. |
+| Bar spacing | `Alt+B` toggles top gap between `60px` visible and `24px` hidden. |
 
 Accessibility path:
 
@@ -78,6 +89,7 @@ The bindings are close to the official AeroSpace default and use `Alt` as the ma
 | `Alt+Shift+1..8` | Move focused window to workspace and follow it. |
 | `Alt+Tab` | Workspace back-and-forth. |
 | `Alt+Shift+;` | Enter service mode. |
+| `Alt+B` | Toggle the workspace bar and resize AeroSpace's top gap. |
 | Service mode `F` | Toggle focused window between floating and tiling. |
 | Service mode `R` | Flatten workspace tree. |
 | Service mode `B` | Balance sizes. |
@@ -106,11 +118,13 @@ Manual checks:
 - [ ] `Alt+Shift+;`, then `F`, toggles floating/tiling.
 - [ ] Hammerspoon global input shortcuts work without taking window-management ownership.
 - [ ] Your Raycast window-management shortcut centers the floating window.
-- [ ] Workspace indicators update in SketchyBar.
+- [ ] `Alt+B` shows/hides SketchyBar; windows move below it when shown and reclaim the space when hidden.
+- [ ] The focused window has a rounded periwinkle border from `borders`.
 
 ## Agent notes
 
 - Do not reintroduce frame persistence, workspace-change restore hooks, or external layout ownership.
+- The SketchyBar toggle is intentionally allowed to update only `gaps.outer.top` and reload AeroSpace because AeroSpace has no runtime gaps command in 0.20.3.
 - Keep Hammerspoon limited to global input helpers.
 - Keep AeroSpace bindings native unless there is a clear reason not to.
 - Keep explicit floating geometry in Raycast, not in AeroSpace scripts.
