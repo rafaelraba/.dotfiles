@@ -4,6 +4,21 @@ local hyper = constants.hyper
 local shiftHyper = { "cmd", "alt", "shift" }
 local pendingScriptTasks = {}
 
+local function isGhosttyActive()
+  local app = hs.application.frontmostApplication()
+  if not app then
+    return false
+  end
+
+  return app:name() == "Ghostty" or app:bundleID() == "com.mitchellh.ghostty"
+end
+
+local function typeTextInGhostty(text)
+  if isGhosttyActive() then
+    hs.eventtap.keyStrokes(text)
+  end
+end
+
 local function runScript(scriptPath)
   if not hs.fs.attributes(scriptPath) then
     hs.printf("Script not found: %s", scriptPath)
@@ -44,3 +59,13 @@ for _, app in ipairs(apps) do
     hs.application.launchOrFocus(app.name)
   end)
 end
+
+-- Ghostty-only Spanish character shortcuts.
+-- Keep these scoped to Ghostty so they do not override macOS accent composition elsewhere.
+hs.hotkey.bind({ "ctrl", "alt" }, "n", function()
+  typeTextInGhostty("ñ")
+end)
+
+hs.hotkey.bind({ "ctrl", "alt", "shift" }, "n", function()
+  typeTextInGhostty("Ñ")
+end)

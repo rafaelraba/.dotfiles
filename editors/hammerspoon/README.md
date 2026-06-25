@@ -16,7 +16,7 @@ This directory is symlinked to `~/.hammerspoon` by `dot self install`.
 ## Ownership boundaries
 
 - **AeroSpace**: tiling, layouts, resize, focus/move, workspaces, workspace-to-monitor behavior.
-- **Hammerspoon**: app launcher and SketchyBar visibility toggling.
+- **Hammerspoon**: app launcher, SketchyBar visibility toggling, and small app-scoped input fixes.
 - **Raycast/Rectangle**: optional floating-window or launcher workflows that do not conflict with AeroSpace bindings.
 
 ## Workspace layout restore
@@ -24,3 +24,10 @@ This directory is symlinked to `~/.hammerspoon` by `dot self install`.
 Per-workspace layout restore is disabled. Hammerspoon should not bind shortcuts for layouts, resize, window focus, monitor movement, or native Spaces proxies; those responsibilities belong to AeroSpace.
 
 `Cmd+Alt+Shift+B` runs `scripts/wm/toggle-sketchybar.sh`, which resolves `sketchybar` through a controlled GUI-safe PATH and toggles only SketchyBar visibility.
+
+## Ghostty input helpers
+
+- `Ctrl+Alt+N` types `ñ` only when Ghostty is the active app.
+- `Ctrl+Alt+Shift+N` types `Ñ` only when Ghostty is the active app.
+
+These bindings are intentionally app-scoped so they do not interfere with macOS accent composition or shortcuts in other apps.

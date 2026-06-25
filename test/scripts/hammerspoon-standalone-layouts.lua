@@ -44,6 +44,9 @@ local function newHarness()
     visibleWindowIds = {},
     taskCount = 0,
     keyStrokes = {},
+    typedText = {},
+    activeAppName = "Ghostty",
+    activeAppBundleId = "com.mitchellh.ghostty",
   }
 
   local function hotkeyId(modifiers, key)
@@ -149,10 +152,23 @@ local function newHarness()
     },
     application = {
       launchOrFocus = function() end,
+      frontmostApplication = function()
+        return {
+          name = function()
+            return harness.activeAppName
+          end,
+          bundleID = function()
+            return harness.activeAppBundleId
+          end,
+        }
+      end,
     },
     eventtap = {
       keyStroke = function(modifiers, key)
         table.insert(harness.keyStrokes, { modifiers = modifiers, key = key })
+      end,
+      keyStrokes = function(text)
+        table.insert(harness.typedText, text)
       end,
     },
     fs = {
@@ -265,40 +281,24 @@ test("center-main applies centered primary and stacked side windows directly", f
   assertEquals(harness.taskCount, 0, "CLI task count")
 end)
 
-test("externally visible layout shortcuts invoke standalone layouts", function()
-  local harness = newHarness()
-  harness:addWindow(1, { focused = true, frame = { x = 0, y = 24, w = 400, h = 400 } })
-  harness:addWindow(2, { frame = { x = 400, y = 24, w = 300, h = 300 } })
-  harness:addWindow(3, { frame = { x = 700, y = 24, w = 300, h = 300 } })
-  harness:setVisible({ 1, 2, 3 })
-
-  require("modules.hotkeys")
-
-  assertHotkey(harness, { "cmd", "alt" }, "s", "Cmd+Alt+S should be bound")()
-  assertFrame(harness.frames[1], { x = 0, y = 24, w = 615, h = 776 }, "Cmd+Alt+S main window")
-
-  assertHotkey(harness, { "cmd", "alt", "shift" }, "s", "Cmd+Alt+Shift+S should be bound")()
-  assertFrame(harness.frames[1], { x = 0, y = 0, w = 328, h = 800 }, "Cmd+Alt+Shift+S first column")
-
-  assertHotkey(harness, { "cmd", "alt", "shift" }, "m", "Cmd+Alt+Shift+M should be bound")()
-  assertFrame(harness.frames[1], { x = 175, y = 0, w = 650, h = 800 }, "Cmd+Alt+Shift+M main window")
-  assertEquals(harness.taskCount, 0, "CLI task count")
-  assertTrue(not package.loaded["modules.workspaceLayoutRestore"], "workspace restore module must not be loaded")
-end)
-
-test("native desktop shortcuts proxy through Mission Control keybindings", function()
+test("spanish character shortcuts only type inside Ghostty", function()
   local harness = newHarness()
 
   require("modules.hotkeys")
 
-  assertHotkey(harness, { "cmd", "alt" }, "1", "Cmd+Alt+1 should be bound")()
-  assertHotkey(harness, { "cmd", "alt" }, "0", "Cmd+Alt+0 should be bound")()
+  assertHotkey(harness, { "ctrl", "alt" }, "n", "Ctrl+Alt+N should be bound")()
+  assertHotkey(harness, { "ctrl", "alt", "shift" }, "n", "Ctrl+Alt+Shift+N should be bound")()
 
-  assertEquals(#harness.keyStrokes, 2, "native desktop key stroke count")
-  assertEquals(harness.keyStrokes[1].modifiers[1], "ctrl", "desktop 1 modifier")
-  assertEquals(harness.keyStrokes[1].key, "1", "desktop 1 key")
-  assertEquals(harness.keyStrokes[2].modifiers[1], "ctrl", "desktop 10 modifier")
-  assertEquals(harness.keyStrokes[2].key, "0", "desktop 10 key")
+  assertEquals(#harness.typedText, 2, "Ghostty typed text count")
+  assertEquals(harness.typedText[1], "ñ", "lowercase enye")
+  assertEquals(harness.typedText[2], "Ñ", "uppercase enye")
+
+  harness.activeAppName = "Safari"
+  harness.activeAppBundleId = "com.apple.Safari"
+
+  assertHotkey(harness, { "ctrl", "alt" }, "n", "Ctrl+Alt+N should remain bound")()
+
+  assertEquals(#harness.typedText, 2, "non-Ghostty apps should be ignored")
 end)
 
 test("resize center and maximize use direct visible-frame geometry", function()
