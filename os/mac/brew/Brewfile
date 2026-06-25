@@ -51,7 +51,6 @@ brew "mas"
 
 # macOS apps
 cask "ghostty"
-cask "hammerspoon"
 cask "nikitabobko/tap/aerospace"
 cask "obsidian"
 cask "raycast"

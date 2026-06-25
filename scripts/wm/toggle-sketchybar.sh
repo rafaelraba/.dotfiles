@@ -35,40 +35,11 @@ resolve_bin() {
 }
 
 SKETCHYBAR_BIN="$(resolve_bin sketchybar SKETCHYBAR_BIN /opt/homebrew/bin/sketchybar /usr/local/bin/sketchybar)"
-AEROSPACE_BIN="$(resolve_bin aerospace AEROSPACE_BIN /opt/homebrew/bin/aerospace /usr/local/bin/aerospace)"
-AEROSPACE_CONFIG="${AEROSPACE_CONFIG:-$HOME/.dotfiles/editors/aerospace/aerospace.toml}"
-VISIBLE_TOP_GAP="${VISIBLE_TOP_GAP:-42}"
-HIDDEN_TOP_GAP="${HIDDEN_TOP_GAP:-8}"
-
-set_aerospace_top_gap() {
-	local top_gap="$1"
-
-	python3 - "$AEROSPACE_CONFIG" "$top_gap" <<'PY'
-from pathlib import Path
-import re
-import sys
-
-path = Path(sys.argv[1])
-top_gap = sys.argv[2]
-content = path.read_text()
-updated = re.sub(r"(?m)^(\s*outer\.top\s*=\s*)\d+\s*$", rf"\g<1>{top_gap}", content, count=1)
-
-if updated == content:
-    raise SystemExit("outer.top setting not found")
-
-path.write_text(updated)
-PY
-
-	"$AEROSPACE_BIN" reload-config >/dev/null
-	"$HOME/.dotfiles/scripts/wm/ensure-visible-windows-top-gap.sh" >/dev/null
-}
 
 hidden="$("$SKETCHYBAR_BIN" --query bar 2>/dev/null | /usr/bin/awk -F'"' '/"hidden"/ { print $4; exit }')"
 
 if [ "$hidden" = "on" ]; then
 	"$SKETCHYBAR_BIN" --bar hidden=off
-	set_aerospace_top_gap "$VISIBLE_TOP_GAP"
 else
 	"$SKETCHYBAR_BIN" --bar hidden=on
-	set_aerospace_top_gap "$HIDDEN_TOP_GAP"
 fi

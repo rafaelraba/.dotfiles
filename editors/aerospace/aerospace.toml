@@ -1,6 +1,3 @@
-# AeroSpace owns window management: layouts, focus/move, resize, workspaces, and monitor movement.
-# Hammerspoon is intentionally kept out of these shortcuts to avoid global hotkey conflicts.
-
 config-version = 2
 start-at-login = true
 
@@ -14,7 +11,7 @@ default-root-container-layout = 'tiles'
 default-root-container-orientation = 'auto'
 
 on-focused-monitor-changed = ['move-mouse monitor-lazy-center']
-exec-on-workspace-change = ['/bin/bash', '-c', '/opt/homebrew/bin/sketchybar --trigger aerospace_workspace_change FOCUSED_WORKSPACE="$AEROSPACE_FOCUSED_WORKSPACE"; sleep 0.2; "$HOME/.dotfiles/scripts/wm/restore-visible-window-frames.sh"']
+exec-on-workspace-change = ['/bin/bash', '-c', '/opt/homebrew/bin/sketchybar --trigger aerospace_workspace_change FOCUSED_WORKSPACE="$AEROSPACE_FOCUSED_WORKSPACE"']
 automatically-unhide-macos-hidden-apps = false
 
 persistent-workspaces = ['1', '2', '3', '4', '5', '6', '7', '8']
@@ -41,67 +38,43 @@ persistent-workspaces = ['1', '2', '3', '4', '5', '6', '7', '8']
     outer.right = 8
 
 [mode.main.binding]
-    # Layouts
-    cmd-alt-slash = 'exec-and-forget /bin/zsh -lc "$HOME/.dotfiles/scripts/wm/tile-focused-workspace.sh horizontal"'
-    cmd-alt-shift-slash = 'exec-and-forget /bin/zsh -lc "$HOME/.dotfiles/scripts/wm/tile-focused-workspace.sh vertical"'
-    cmd-alt-s = 'exec-and-forget /bin/zsh -lc "$HOME/.dotfiles/scripts/wm/stack-right-focused-workspace.sh"'
-    cmd-alt-comma = 'layout accordion horizontal vertical'
+    alt-slash = 'layout tiles horizontal vertical'
+    alt-comma = 'layout accordion horizontal vertical'
 
-    # Focus
-    cmd-alt-h = 'exec-and-forget /bin/zsh -lc "$HOME/.dotfiles/scripts/wm/focus-window-direction.sh left"'
-    cmd-alt-j = 'exec-and-forget /bin/zsh -lc "$HOME/.dotfiles/scripts/wm/focus-window-direction.sh down"'
-    cmd-alt-k = 'exec-and-forget /bin/zsh -lc "$HOME/.dotfiles/scripts/wm/focus-window-direction.sh up"'
-    cmd-alt-l = 'exec-and-forget /bin/zsh -lc "$HOME/.dotfiles/scripts/wm/focus-window-direction.sh right"'
+    alt-h = 'focus left'
+    alt-j = 'focus down'
+    alt-k = 'focus up'
+    alt-l = 'focus right'
 
-    # Move windows inside the workspace tree
-    cmd-alt-shift-h = 'move left'
-    cmd-alt-shift-j = 'move down'
-    cmd-alt-shift-k = 'move up'
-    cmd-alt-shift-l = 'move right'
+    alt-shift-h = 'move left'
+    alt-shift-j = 'move down'
+    alt-shift-k = 'move up'
+    alt-shift-l = 'move right'
 
-    # Single-window floating resize delegated to a small Hammerspoon CLI helper.
-    # AeroSpace resize works on tiling splits; this handles explicit width + height geometry.
-    cmd-alt-minus = ['layout floating', 'exec-and-forget /bin/zsh -lc "$HOME/.dotfiles/scripts/wm/center-focused-window.sh 0.50 0.75"']
-    cmd-alt-equal = ['layout floating', 'exec-and-forget /bin/zsh -lc "$HOME/.dotfiles/scripts/wm/center-focused-window.sh 0.66 0.85"']
+    alt-minus = 'resize smart -50'
+    alt-equal = 'resize smart +50'
 
-    # Floating window actions delegated to small Hammerspoon CLI helpers.
-    # AeroSpace owns tiling; helpers own explicit floating placement.
-    cmd-alt-m = ['layout floating', 'exec-and-forget /bin/zsh -lc "$HOME/.dotfiles/scripts/wm/center-focused-window.sh 0.78 0.90"']
-    cmd-alt-f = ['layout floating', 'exec-and-forget /bin/zsh -lc "$HOME/.dotfiles/scripts/wm/maximize-focused-window.sh"']
+    alt-1 = 'workspace 1'
+    alt-2 = 'workspace 2'
+    alt-3 = 'workspace 3'
+    alt-4 = 'workspace 4'
+    alt-5 = 'workspace 5'
+    alt-6 = 'workspace 6'
+    alt-7 = 'workspace 7'
+    alt-8 = 'workspace 8'
 
-    # Workspaces
-    cmd-alt-1 = 'workspace 1'
-    cmd-alt-2 = 'workspace 2'
-    cmd-alt-3 = 'workspace 3'
-    cmd-alt-4 = 'workspace 4'
-    cmd-alt-5 = 'workspace 5'
-    cmd-alt-6 = 'workspace 6'
-    cmd-alt-7 = 'workspace 7'
-    cmd-alt-8 = 'workspace 8'
+    alt-shift-1 = ['move-node-to-workspace 1', 'workspace 1']
+    alt-shift-2 = ['move-node-to-workspace 2', 'workspace 2']
+    alt-shift-3 = ['move-node-to-workspace 3', 'workspace 3']
+    alt-shift-4 = ['move-node-to-workspace 4', 'workspace 4']
+    alt-shift-5 = ['move-node-to-workspace 5', 'workspace 5']
+    alt-shift-6 = ['move-node-to-workspace 6', 'workspace 6']
+    alt-shift-7 = ['move-node-to-workspace 7', 'workspace 7']
+    alt-shift-8 = ['move-node-to-workspace 8', 'workspace 8']
 
-    # Move focused window to workspace
-    cmd-alt-shift-1 = 'exec-and-forget /bin/zsh -lc "$HOME/.dotfiles/scripts/wm/move-focused-window-to-workspace.sh 1"'
-    cmd-alt-shift-2 = 'exec-and-forget /bin/zsh -lc "$HOME/.dotfiles/scripts/wm/move-focused-window-to-workspace.sh 2"'
-    cmd-alt-shift-3 = 'exec-and-forget /bin/zsh -lc "$HOME/.dotfiles/scripts/wm/move-focused-window-to-workspace.sh 3"'
-    cmd-alt-shift-4 = 'exec-and-forget /bin/zsh -lc "$HOME/.dotfiles/scripts/wm/move-focused-window-to-workspace.sh 4"'
-    cmd-alt-shift-5 = 'exec-and-forget /bin/zsh -lc "$HOME/.dotfiles/scripts/wm/move-focused-window-to-workspace.sh 5"'
-    cmd-alt-shift-6 = 'exec-and-forget /bin/zsh -lc "$HOME/.dotfiles/scripts/wm/move-focused-window-to-workspace.sh 6"'
-    cmd-alt-shift-7 = 'exec-and-forget /bin/zsh -lc "$HOME/.dotfiles/scripts/wm/move-focused-window-to-workspace.sh 7"'
-    cmd-alt-shift-8 = 'exec-and-forget /bin/zsh -lc "$HOME/.dotfiles/scripts/wm/move-focused-window-to-workspace.sh 8"'
+    alt-tab = 'workspace-back-and-forth'
 
-    cmd-alt-tab = 'workspace-back-and-forth'
-    cmd-alt-shift-tab = 'move-workspace-to-monitor --wrap-around next'
-
-    # Monitor focus
-    ctrl-alt-cmd-h = 'focus-monitor --wrap-around left'
-    ctrl-alt-cmd-l = 'focus-monitor --wrap-around right'
-
-    # Move focused window to monitor and keep floating frames inside the target screen.
-    ctrl-alt-cmd-shift-h = 'exec-and-forget /bin/zsh -lc "$HOME/.dotfiles/scripts/wm/move-focused-window-to-monitor.sh left"'
-    ctrl-alt-cmd-shift-l = 'exec-and-forget /bin/zsh -lc "$HOME/.dotfiles/scripts/wm/move-focused-window-to-monitor.sh right"'
-
-    # Service mode
-    cmd-alt-shift-semicolon = 'mode service'
+    alt-shift-semicolon = 'mode service'
 
 [mode.service.binding]
     esc = ['reload-config', 'mode main']
@@ -113,7 +86,7 @@ persistent-workspaces = ['1', '2', '3', '4', '5', '6', '7', '8']
     minus = ['resize smart -50', 'mode main']
     equal = ['resize smart +50', 'mode main']
 
-    cmd-alt-shift-h = ['join-with left', 'mode main']
-    cmd-alt-shift-j = ['join-with down', 'mode main']
-    cmd-alt-shift-k = ['join-with up', 'mode main']
-    cmd-alt-shift-l = ['join-with right', 'mode main']
+    alt-shift-h = ['join-with left', 'mode main']
+    alt-shift-j = ['join-with down', 'mode main']
+    alt-shift-k = ['join-with up', 'mode main']
+    alt-shift-l = ['join-with right', 'mode main']
