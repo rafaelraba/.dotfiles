@@ -35,6 +35,7 @@ check_command() {
 }
 
 echo "Symlinks:"
+check_symlink "$HOME/.hammerspoon"
 check_symlink "$HOME/.config/nvim"
 check_symlink "$HOME/.config/tmux"
 check_symlink "$HOME/.config/lazygit/config.yml"
@@ -59,10 +60,12 @@ check_command sketchybar
 
 echo ""
 echo "Manual steps after first install:"
-echo "  1. Open Raycast and grant Accessibility permissions."
-echo "  2. Configure or import Raycast Window Management settings and hotkeys."
-echo "  3. Optionally export Raycast settings to an encrypted .rayconfig backup."
-echo "  4. In Ghostty, set the font to 'JetBrainsMono Nerd Font' or 'IosevkaTerm Nerd Font'."
+echo "  1. Open Hammerspoon and grant Accessibility permissions."
+echo "  2. Reload Hammerspoon config for global input helpers."
+echo "  3. Open Raycast and grant Accessibility permissions."
+echo "  4. Configure or import Raycast Window Management settings and hotkeys."
+echo "  5. Optionally export Raycast settings to an encrypted .rayconfig backup."
+echo "  6. In Ghostty, set the font to 'JetBrainsMono Nerd Font' or 'IosevkaTerm Nerd Font'."
 echo ""
 
 exit 0

@@ -1,6 +1,6 @@
 # .dotfiles created with [dotly](https://github.com/CodelyTV/dotly)
 
-Personal macOS setup: Neovim, tmux, Ghostty, LazyGit, AeroSpace, SketchyBar, Raycast, zsh, and Starship.
+Personal macOS setup: Neovim, tmux, Ghostty, LazyGit, AeroSpace, SketchyBar, Hammerspoon, Raycast, zsh, and Starship.
 
 ## Quick install
 
@@ -50,16 +50,17 @@ After `restore.sh`:
 
 1. **AeroSpace**: open the app once, grant Accessibility permissions, then run `aerospace reload-config`.
 2. **SketchyBar**: start or reload it with `brew services restart sketchybar` or `sketchybar --reload`.
-3. **Raycast**: configure Window Management in the app and import/export Raycast settings when moving between machines.
-4. **Ghostty**: in Settings, use `JetBrainsMono Nerd Font` or `IosevkaTerm Nerd Font`.
+3. **Hammerspoon**: open the app once, grant Accessibility permissions, then reload config.
+4. **Raycast**: configure Window Management in the app and import/export Raycast settings when moving between machines.
+5. **Ghostty**: in Settings, use `JetBrainsMono Nerd Font` or `IosevkaTerm Nerd Font`.
 
 ## Accessibility permissions
 
-AeroSpace and Raycast need Accessibility permissions for the active workflow:
+AeroSpace, Hammerspoon, and Raycast need Accessibility permissions for the active workflow:
 
 ```text
 System Settings → Privacy & Security → Accessibility
-→ Add/enable: AeroSpace, Raycast
+→ Add/enable: AeroSpace, Hammerspoon, Raycast
 ```
 
 Without Accessibility permissions, window-management hotkeys and window placement actions will not work.
@@ -71,6 +72,7 @@ This setup is intentionally simple and split by responsibility:
 | Runtime | Responsibility |
 |---------|----------------|
 | AeroSpace | Workspaces, tiling tree, default focus/move/resize hotkeys, monitor assignment, workspace-change SketchyBar trigger. |
+| Hammerspoon | Global keyboard input helpers only. No windows, layouts, workspaces, or app launchers. |
 | Raycast | One-shot centered floating-window placement and sizing. |
 | SketchyBar | Transparent top workspace bar with per-monitor workspace indicators. |
 
@@ -79,6 +81,7 @@ Important restore files:
 | Repo path | Target / purpose |
 |-----------|------------------|
 | `editors/aerospace/aerospace.toml` | `~/.config/aerospace/aerospace.toml` |
+| `editors/hammerspoon` | `~/.hammerspoon`, global input helpers only. |
 | `editors/raycast/README.md` | Raycast restore, hotkey, and export/import guidance. |
 | `editors/sketchybar` | `~/.config/sketchybar` |
 | `scripts/wm/toggle-sketchybar.sh` | Toggles SketchyBar only. |
@@ -102,6 +105,7 @@ Current workspace model:
 
 - [ ] `aerospace --version` works and `aerospace reload-config` succeeds.
 - [ ] `sketchybar --reload` works and workspace indicators appear on both monitors.
+- [ ] Hammerspoon global input shortcuts work: `Ctrl+Option+N` → `ñ`, `Ctrl+Option+Shift+N` → `Ñ`, `Ctrl+Option+E` then vowel → accented vowel.
 - [ ] `Alt+Shift+;`, then `F`, toggles a focused window between floating and tiling.
 - [ ] Your Raycast window-management shortcut centers a floating window.
 - [ ] Toggling SketchyBar does not modify AeroSpace config.

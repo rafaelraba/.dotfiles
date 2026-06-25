@@ -16,7 +16,9 @@ grep_noncomment() {
 }
 
 aerospace_config="$ROOT/editors/aerospace/aerospace.toml"
-legacy_automation_dir="$ROOT/editors/hammer""spoon"
+hammerspoon_dir="$ROOT/editors/hammerspoon"
+hammerspoon_init="$hammerspoon_dir/init.lua"
+hammerspoon_input="$hammerspoon_dir/modules/input.lua"
 toggle_sketchybar="$ROOT/scripts/wm/toggle-sketchybar.sh"
 
 echo "Checking clean window-management invariants under $ROOT ..."
@@ -39,8 +41,28 @@ else
   fi
 fi
 
-if [[ -d "$legacy_automation_dir" ]] && find "$legacy_automation_dir" -type f 2>/dev/null | grep -q .; then
-  error "Legacy automation config files should not exist in the AeroSpace + Raycast window-management setup"
+if [[ ! -f "$hammerspoon_init" ]]; then
+  error "Hammerspoon init missing: $hammerspoon_init"
+elif ! grep -Eq 'require\("modules\.input"\)' "$hammerspoon_init"; then
+  error "Hammerspoon init must load only the global input helper module"
+fi
+
+if [[ ! -f "$hammerspoon_input" ]]; then
+  error "Hammerspoon global input helper missing: $hammerspoon_input"
+else
+  matches="$(grep_noncomment 'hs\.window|hs\.layout|hs\.spaces|hs\.application|scripts/wm|aerospace|sketchybar|setFrame' "$hammerspoon_input")"
+  if [[ -n "$matches" ]]; then
+    printf '%s\n' "$matches" >&2
+    error "Hammerspoon must stay limited to global input helpers"
+  fi
+fi
+
+if [[ -d "$hammerspoon_dir/modules" ]]; then
+  hammerspoon_module_count="$(find "$hammerspoon_dir/modules" -type f -name '*.lua' 2>/dev/null | wc -l | tr -d ' ')"
+  if [[ "$hammerspoon_module_count" != "1" ]]; then
+    find "$hammerspoon_dir/modules" -type f -name '*.lua' 2>/dev/null >&2 || true
+    error "Hammerspoon modules should contain only input.lua"
+  fi
 fi
 
 if [[ -f "$toggle_sketchybar" ]]; then

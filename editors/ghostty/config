@@ -65,11 +65,6 @@ keybind = alt+arrow_right=text:\x01L
 # Tmux bottom runner panel: Option + Enter
 keybind = alt+enter=text:\x01\r
 
-# Spanish characters in Ghostty without global automation tools.
-keybind = ctrl+alt+n=text:ñ
-keybind = ctrl+alt+shift+n=text:Ñ
-keybind = ctrl+alt+e=text:´
-
 # 🎨 Theme
 
 theme = Kanagawa Dragon
