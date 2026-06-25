@@ -62,9 +62,6 @@ keybind = cmd+t=ignore
 keybind = alt+arrow_left=text:\x01H
 keybind = alt+arrow_right=text:\x01L
 
-# Tmux bottom runner panel: Option + Enter
-keybind = alt+enter=text:\x01\r
-
 # 🎨 Theme
 
 theme = Kanagawa Dragon
