@@ -68,7 +68,7 @@ keybind = alt+enter=text:\x01\r
 # Spanish characters in Ghostty without global automation tools.
 keybind = ctrl+alt+n=text:ñ
 keybind = ctrl+alt+shift+n=text:Ñ
-keybind = ctrl+alt+quote=text:´
+keybind = ctrl+alt+e=text:´
 
 # 🎨 Theme
 
