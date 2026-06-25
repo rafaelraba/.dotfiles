@@ -56,7 +56,7 @@ const HTML = `<!DOCTYPE html>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" id="hljs-theme">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/markdown-it/13.0.2/markdown-it.min.js"><\/script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"><\/script>
-<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"><\/script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"><\/script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"><\/script>
 <style>
@@ -308,6 +308,30 @@ body {
 .mermaid-wrapper .mermaid svg {
   max-width: 100%;
   height: auto;
+}
+
+.mermaid-error {
+  padding: 16px;
+  color: var(--red);
+  background: rgba(248, 81, 73, 0.08);
+  border: 1px solid rgba(248, 81, 73, 0.35);
+  border-radius: 8px;
+}
+
+.mermaid-error strong { display: block; margin-bottom: 8px; }
+.mermaid-error pre {
+  margin: 8px 0 0;
+  padding: 12px;
+  color: var(--text);
+  background: var(--bg);
+  border-radius: 6px;
+  white-space: pre-wrap;
+}
+
+.mermaid-error summary {
+  margin-top: 12px;
+  cursor: pointer;
+  color: var(--text-secondary);
 }
 
 .mermaid-expand {
@@ -832,6 +856,27 @@ const md = window.markdownit({
 });
 
 const defaultFence = md.renderer.rules.fence.bind(md.renderer.rules);
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, function(ch) {
+    return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch];
+  });
+}
+
+function getMermaidDiagramKeyword(source) {
+  var lines = source.trim().split(/\\n/);
+  if (lines[0] === "---") {
+    var end = lines.indexOf("---", 1);
+    if (end > 0) lines = lines.slice(end + 1);
+  }
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (!line || line.indexOf("%%") === 0) continue;
+    return line.split(/[\\s;]/)[0];
+  }
+  return "";
+}
+
 md.renderer.rules.fence = (tokens, idx, options, env, slf) => {
   const token = tokens[idx];
   const code = token.content.trim();
@@ -839,14 +884,17 @@ md.renderer.rules.fence = (tokens, idx, options, env, slf) => {
 
   const mermaidKeywords = ["graph", "flowchart", "sequenceDiagram", "classDiagram",
     "stateDiagram", "erDiagram", "gantt", "pie", "gitgraph", "mindmap", "timeline",
-    "journey", "quadrantChart", "sankey", "xychart"];
-  const firstWord = code.split(/[\s;]/)[0];
+    "journey", "quadrantChart", "sankey", "xychart", "requirementDiagram", "C4Context",
+    "C4Container", "C4Component", "C4Dynamic", "C4Deployment", "kanban", "packet-beta",
+    "radar", "block-beta", "architecture-beta", "treemap", "info"];
+  const firstWord = getMermaidDiagramKeyword(code);
   const isMermaid = info === "mermaid" || mermaidKeywords.includes(firstWord);
 
   if (isMermaid) {
     const id = "mmd-" + Math.random().toString(36).slice(2, 9);
     return '<div class="mermaid-wrapper">' +
-      '<div class="mermaid" id="' + id + '">' + code + '</div>' +
+      '<div class="mermaid-source" hidden>' + escapeHtml(code) + '</div>' +
+      '<div class="mermaid" id="' + id + '"></div>' +
       '<button class="mermaid-expand" title="Expand" onclick="openMermaidModal(this.parentElement)">' +
         '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
           '<polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>' +
@@ -1048,6 +1096,45 @@ function renderKaTeX(html) {
   return parts.join("");
 }
 
+function getMermaidTheme() {
+  return document.documentElement.classList.contains("light") ? "default" : "dark";
+}
+
+function initializeMermaid() {
+  mermaid.parseError = function(err) {
+    console.warn("Mermaid parse error:", err);
+  };
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: getMermaidTheme(),
+    securityLevel: "loose",
+    fontFamily: "Inter, sans-serif",
+  });
+}
+
+function renderMermaidError(error, source) {
+  var message = error && error.message ? error.message : String(error || "Unknown Mermaid error");
+  return '<div class="mermaid-error">' +
+    '<strong>Mermaid render error</strong>' +
+    '<pre>' + escapeHtml(message) + '</pre>' +
+    '<details><summary>Show source</summary><pre><code>' + escapeHtml(source) + '</code></pre></details>' +
+  '</div>';
+}
+
+async function renderMermaidNode(node) {
+  var wrapper = node.closest(".mermaid-wrapper");
+  var sourceEl = wrapper ? wrapper.querySelector(".mermaid-source") : null;
+  var source = (sourceEl ? sourceEl.textContent : node.textContent).trim();
+  node.__raw = source;
+  try {
+    var id = node.id + "-svg-" + Math.random().toString(36).slice(2, 9);
+    var result = await mermaid.render(id, source);
+    node.innerHTML = result.svg;
+  } catch (error) {
+    node.innerHTML = renderMermaidError(error, source);
+  }
+}
+
 function copyCode(btn) {
   var pre = btn.parentElement.querySelector("pre code");
   if (!pre) return;
@@ -1153,20 +1240,10 @@ function renderContent(text) {
   var frontmatterHtml = parseFrontmatter(text);
   el.innerHTML = frontmatterHtml + rendered;
 
-  mermaid.initialize({
-    startOnLoad: false,
-    theme: document.documentElement.classList.contains("light") ? "default" : "dark",
-    securityLevel: "loose",
-    fontFamily: "Inter, sans-serif",
-  });
+  initializeMermaid();
 
   document.querySelectorAll(".mermaid").forEach(function(node) {
-    var id = node.id;
-    try {
-      mermaid.render(id + "-svg", node.textContent.trim()).then(function(result) {
-        node.innerHTML = result.svg;
-      });
-    } catch(e) {}
+    renderMermaidNode(node);
   });
 
   buildTOC();
@@ -1208,22 +1285,9 @@ document.getElementById("theme-toggle").onclick = () => {
     ? "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css"
     : "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css";
 
+  initializeMermaid();
   document.querySelectorAll(".mermaid").forEach((node) => {
-    const wrapper = node.closest(".mermaid-wrapper");
-    if (wrapper) {
-      const raw = wrapper.querySelector(".mermaid");
-      if (raw && raw.__raw) {
-        mermaid.initialize({
-          startOnLoad: false,
-          theme: isLight ? "default" : "dark",
-          securityLevel: "loose",
-          fontFamily: "Inter, sans-serif",
-        });
-        mermaid.render(raw.id + "-svg2", raw.__raw).then(({ svg }) => {
-          raw.innerHTML = svg;
-        });
-      }
-    }
+    renderMermaidNode(node);
   });
 };
 
