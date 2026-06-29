@@ -40,7 +40,7 @@ persistent-workspaces = ['1', '2', '3', '4', '5', '6', '7', '8']
     outer.right = 28
 
 [mode.main.binding]
-    alt-slash = 'layout tiles horizontal vertical'
+    alt-slash = 'exec-and-forget "$HOME/.dotfiles/scripts/wm/tile-focused-workspace.sh"'
     alt-comma = 'layout accordion horizontal vertical'
     alt-b = 'exec-and-forget "$HOME/.dotfiles/scripts/wm/toggle-sketchybar.sh"'
 
