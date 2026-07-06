@@ -14,7 +14,12 @@ fi
 sessions=()
 while IFS= read -r session; do
   [[ -n "$session" ]] && sessions+=("$session")
-done < <(tmux list-sessions -F '#{session_name}' -f '#{?#{m:_*,#{session_name}},0,1}' 2>/dev/null || true)
+done < <(
+  tmux list-sessions -F '#{session_created} #{session_name}' -f '#{?#{m:_*,#{session_name}},0,1}' 2>/dev/null \
+    | sort -n \
+    | cut -d ' ' -f 2- \
+    || true
+)
 
 if ((${#sessions[@]} <= 1)); then
   exit 0
