@@ -2,7 +2,7 @@ config-version = 2
 start-at-login = true
 
 after-startup-command = [
-    'exec-and-forget borders style=round width=7.0 hidpi=on ax_focus=on active_color=0xff89b4fa inactive_color=0x00000000 background_color=0x00000000',
+    'exec-and-forget borders style=round width=7.0 hidpi=on ax_focus=on active_color=0xff3b4261 inactive_color=0x00000000 background_color=0x00000000',
 ]
 
 enable-normalization-flatten-containers = true
