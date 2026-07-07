@@ -64,3 +64,11 @@ export PATH=$HOME/.opencode/bin:$PATH
 
 # Added by Antigravity
 export PATH="$HOME/.antigravity/antigravity/bin:$PATH"
+
+# Added by git-ai installer on Thu Jun 25 16:03:08 -05 2026
+export PATH="/Users/rrabamoreno/.git-ai/bin:$PATH"
+export ANTHROPIC_MODEL="claude-sonnet-4-6[1m]"
+
+# Internal Python Registry
+export PIP_INDEX_URL='https://pypi.artifacts.furycloud.io/simple'
+export UV_INDEX_URL='https://pypi.artifacts.furycloud.io/simple'

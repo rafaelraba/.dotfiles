@@ -1,6 +1,6 @@
 [user]
 	name = Rafael Raba
-	email = rafaelrb40@gmail.com
+	email = rafael.rabamoreno@mercadolibre.com.co
 [core]
 	pager = delta --dark
 [interactive]
@@ -77,3 +77,6 @@
 	inline-hint-style = syntax "#3c3836"
 	whitespace-error-style = "#ea6962" reverse
 	map-styles = bold purple => syntax "#3d3139", bold blue => syntax "#293b3a", bold cyan => syntax "#293f3c", bold yellow => syntax "#43371f"
+[trace2]
+	eventTarget = af_unix:stream:/Users/rrabamoreno/.git-ai/internal/daemon/trace2.sock
+	eventNesting = 10
