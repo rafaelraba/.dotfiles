@@ -54,6 +54,7 @@ After `restore.sh`:
 4. **Hammerspoon**: open the app once, grant Accessibility permissions, then reload config.
 5. **Raycast**: configure Window Management in the app and import/export Raycast settings when moving between machines.
 6. **Ghostty**: in Settings, use `JetBrainsMono Nerd Font` or `IosevkaTerm Nerd Font`.
+7. **AI agent status**: restart Claude Code and OpenCode so they reload the restored tmux status hooks/plugins.
 
 ## Accessibility permissions
 
@@ -88,6 +89,30 @@ Important restore files:
 | `editors/sketchybar` | `~/.config/sketchybar` |
 | `scripts/wm/toggle-sketchybar.sh` | Toggles SketchyBar and updates AeroSpace's top gap. |
 
+## AI agent status restore
+
+Tmux shows shared agent state for Pi, OpenCode, and Claude Code using the same protocol: `running`, `blocked`, `done`, `idle`, and `error`.
+
+Important restore files:
+
+| Repo path | Target / purpose |
+|-----------|------------------|
+| `scripts/agent-status.sh` | Generic tmux agent status protocol. |
+| `scripts/status-sessions.sh` | Renders tmux session pills with agent status dots. |
+| `editors/pi/agent/extensions/tmux-agent-status.ts` | `~/.pi/agent/extensions/tmux-agent-status.ts` |
+| `editors/opencode/plugins/tmux-agent-status.ts` | `~/.config/opencode/plugins/tmux-agent-status.ts` |
+| `editors/claude/settings.json` | `~/.claude/settings.json`, including Claude Code hooks for tmux status. |
+| `scripts/claude-agent-status.sh` | Claude Code hook adapter for tmux status. |
+
+After restore, restart tmux, Claude Code, and OpenCode.
+
+Quick verification:
+
+```bash
+test -L ~/.claude/settings.json
+test -L ~/.config/opencode/plugins/tmux-agent-status.ts
+```
+
 Visual defaults:
 
 - Focus border: JankyBorders `style=round`, `width=7.0`, active color `#89b4fa`.
@@ -121,6 +146,8 @@ Current workspace model:
 - [ ] The focused window has a rounded periwinkle border from `borders`.
 - [ ] `nvim` opens without plugin errors.
 - [ ] `tmux` starts and the prefix is `Ctrl+a`.
+- [ ] Claude Code and OpenCode restart with tmux agent status hooks/plugins loaded.
+- [ ] `~/.claude/settings.json` and `~/.config/opencode/plugins/tmux-agent-status.ts` are symlinks into `~/.dotfiles`.
 - [ ] `lazygit` opens.
 - [ ] `ghostty` uses a Nerd Font.
 - [ ] Raycast window-management shortcuts respond.
