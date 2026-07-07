@@ -1,0 +1,153 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(rm -rf /)",
+      "Bash(sudo rm -rf /)",
+      "Bash(rm -rf ~)",
+      "Bash(sudo rm -rf ~)",
+      "Read(.env)",
+      "Read(.env.*)",
+      "Edit(.env)",
+      "Edit(.env.*)"
+    ],
+    "defaultMode": "default"
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -x \"$HOME/Library/Application Support/orca/agent-hooks/claude-hook.sh\" ]; then /bin/sh \"$HOME/Library/Application Support/orca/agent-hooks/claude-hook.sh\"; fi"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.dotfiles/scripts/claude-agent-status.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -x \"$HOME/Library/Application Support/orca/agent-hooks/claude-hook.sh\" ]; then /bin/sh \"$HOME/Library/Application Support/orca/agent-hooks/claude-hook.sh\"; fi"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.dotfiles/scripts/claude-agent-status.sh"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -x \"$HOME/Library/Application Support/orca/agent-hooks/claude-hook.sh\" ]; then /bin/sh \"$HOME/Library/Application Support/orca/agent-hooks/claude-hook.sh\"; fi"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.dotfiles/scripts/claude-agent-status.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -x \"$HOME/Library/Application Support/orca/agent-hooks/claude-hook.sh\" ]; then /bin/sh \"$HOME/Library/Application Support/orca/agent-hooks/claude-hook.sh\"; fi"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.dotfiles/scripts/claude-agent-status.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -x \"$HOME/Library/Application Support/orca/agent-hooks/claude-hook.sh\" ]; then /bin/sh \"$HOME/Library/Application Support/orca/agent-hooks/claude-hook.sh\"; fi"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.dotfiles/scripts/claude-agent-status.sh"
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -x \"$HOME/Library/Application Support/orca/agent-hooks/claude-hook.sh\" ]; then /bin/sh \"$HOME/Library/Application Support/orca/agent-hooks/claude-hook.sh\"; fi"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.dotfiles/scripts/claude-agent-status.sh"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.dotfiles/scripts/claude-agent-status.sh"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.dotfiles/scripts/claude-agent-status.sh"
+          }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "$HOME/.claude/statusline-command.sh"
+  },
+  "enabledPlugins": {
+    "engram@engram": true,
+    "figma@claude-plugins-official": true,
+    "skill-creator@claude-plugins-official": true
+  },
+  "extraKnownMarketplaces": {
+    "engram": {
+      "source": {
+        "source": "github",
+        "repo": "Gentleman-Programming/engram"
+      }
+    }
+  },
+  "outputStyle": "Gentleman",
+  "language": "spanish",
+  "effortLevel": "high",
+  "voice": {
+    "enabled": true,
+    "mode": "hold"
+  },
+  "editorMode": "vim",
+  "skipAutoPermissionPrompt": true,
+  "voiceEnabled": true,
+  "tui": "fullscreen"
+}
