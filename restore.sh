@@ -26,18 +26,29 @@ fi
 
 # ── 4. Instalar plugins de tmux ──
 echo "🔌 Instalando plugins de tmux..."
-"$TPM_PATH/bin/install_plugins" > /dev/null 2>&1 || true
+"$TPM_PATH/bin/install_plugins"
 
 # ── 5. Homebrew packages (solo macOS) ──
 if command -v brew &> /dev/null; then
     BREWFILE="$DOTFILES_PATH/os/mac/brew/Brewfile"
     if [ -f "$BREWFILE" ]; then
         echo "🍺 Instalando paquetes de Homebrew..."
-        brew bundle --file="$BREWFILE" --no-lock || echo "⚠️  Algunos paquetes pueden fallar, revisá manualmente"
+        brew bundle --file="$BREWFILE"
+    else
+        echo "❌ Brewfile no encontrado: $BREWFILE"
+        exit 1
     fi
 else
-    echo "⚠️  Homebrew no detectado. Instalalo primero: https://brew.sh"
+    echo "❌ Homebrew no detectado. Instalalo primero: https://brew.sh"
+    exit 1
 fi
+
+# ── 6. Bootstrap Neovim plugins ──
+echo " Restaurando versiones bloqueadas de plugins de Neovim..."
+nvim --headless "+Lazy! restore" "+qall"
+
+# ── 7. Verify the restored environment ──
+DOTFILES_VERIFY_STRICT=1 "$DOTFILES_PATH/restoration_scripts/01-verify-install.sh"
 
 echo ""
 echo "✅ Restauración completa. Reiniciá tu terminal."

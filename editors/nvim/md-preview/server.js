@@ -1361,10 +1361,10 @@ const server = createServer((req, res) => {
   res.end(HTML);
 });
 
-const PORT = 4400 + Math.floor(Math.random() * 100);
-
-server.listen(PORT, () => {
-  const url = `http://localhost:${PORT}`;
+server.listen(0, "127.0.0.1", () => {
+  const address = server.address();
+  const port = typeof address === "object" ? address.port : 0;
+  const url = `http://localhost:${port}`;
   console.log(`\x1b[32m✓\x1b[0m Serving \x1b[1m${fileName}\x1b[0m at \x1b[36m${url}\x1b[0m`);
   console.log(`\x1b[90m  Live reload active · Ctrl+C to stop\x1b[0m`);
 });

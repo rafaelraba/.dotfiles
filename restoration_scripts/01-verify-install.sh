@@ -2,9 +2,11 @@
 set -uo pipefail
 
 # Post-install verification for Rafael's dotfiles.
-# Runs automatically after `dot self install`. Never fails the install.
+# Runs after `dot self install`. Set DOTFILES_VERIFY_STRICT=1 to fail on errors.
 
 DOTFILES_PATH="${DOTFILES_PATH:-$HOME/.dotfiles}"
+STRICT="${DOTFILES_VERIFY_STRICT:-0}"
+failures=0
 
 echo "🔍 Verifying dotfiles setup..."
 echo ""
@@ -16,9 +18,11 @@ check_symlink() {
         return 0
     elif [ -e "$target" ]; then
         echo "  ⚠️  exists but is not a symlink: $target"
+        failures=$((failures + 1))
         return 1
     else
         echo "  ⚠️  missing: $target"
+        failures=$((failures + 1))
         return 1
     fi
 }
@@ -30,6 +34,7 @@ check_command() {
         return 0
     else
         echo "  ⚠️  not in PATH: $cmd"
+        failures=$((failures + 1))
         return 1
     fi
 }
@@ -45,6 +50,8 @@ check_symlink "$HOME/Library/Application Support/com.mitchellh.ghostty/config"
 echo ""
 echo "Core tools:"
 check_command nvim
+check_command node
+check_command npm
 check_command tmux
 check_command lazygit
 check_command starship
@@ -59,6 +66,15 @@ echo "Window management:"
 check_command sketchybar
 
 echo ""
+echo "Neovim Markdown:"
+if nvim --headless '+lua assert(vim.fn.executable("marksman") == 1, "marksman is not in PATH")' '+qall'; then
+    echo "  ✅ marksman"
+else
+    echo "  ⚠️  marksman is not in PATH"
+    failures=$((failures + 1))
+fi
+
+echo ""
 echo "Manual steps after first install:"
 echo "  1. Open Hammerspoon and grant Accessibility permissions."
 echo "  2. Reload Hammerspoon config for global input helpers."
@@ -67,5 +83,10 @@ echo "  4. Configure or import Raycast Window Management settings and hotkeys."
 echo "  5. Optionally export Raycast settings to an encrypted .rayconfig backup."
 echo "  6. In Ghostty, set the font to 'JetBrainsMono Nerd Font' or 'IosevkaTerm Nerd Font'."
 echo ""
+
+if [ "$STRICT" = "1" ] && [ "$failures" -gt 0 ]; then
+    echo "Verification failed with $failures issue(s)."
+    exit 1
+fi
 
 exit 0

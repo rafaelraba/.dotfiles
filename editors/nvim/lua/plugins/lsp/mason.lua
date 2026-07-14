@@ -30,7 +30,7 @@ return {
     },
     opts = {
       -- Instalación automática de LSP servers configurados en lspconfig
-      automatic_installation = true,
+      automatic_installation = false,
     },
   },
 }

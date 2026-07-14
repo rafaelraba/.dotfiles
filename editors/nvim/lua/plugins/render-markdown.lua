@@ -21,6 +21,11 @@ return {
       {
         "<leader>mp",
         function()
+          if vim.fn.executable("node") ~= 1 then
+            vim.notify("Markdown preview requires Node.js. Run brew bundle from ~/.dotfiles.", vim.log.levels.ERROR)
+            return
+          end
+
           local file = vim.fn.expand("%:p")
           local script = vim.fn.expand("~/.config/nvim/md-preview/server.js")
           vim.fn.jobstart({ "node", script, file }, {

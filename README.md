@@ -1,6 +1,6 @@
 # .dotfiles created with [dotly](https://github.com/CodelyTV/dotly)
 
-Personal macOS setup: Neovim, tmux, Ghostty, LazyGit, AeroSpace, SketchyBar, Hammerspoon, Raycast, zsh, and Starship.
+Personal Apple Silicon macOS setup: Neovim, tmux, Ghostty, LazyGit, AeroSpace, SketchyBar, Hammerspoon, Raycast, zsh, and Starship.
 
 ## Quick install
 
@@ -18,8 +18,7 @@ Restart the terminal when it finishes.
 
 - Git with an SSH key configured in GitHub.
 - Homebrew installed on macOS: [brew.sh](https://brew.sh).
-- macOS 13+ for AeroSpace.
-- On Intel macOS, run the same `restore.sh`; dotly applies the correct platform symlinks.
+- Apple Silicon macOS 13+ for AeroSpace.
 
 ## What gets installed
 
@@ -29,7 +28,8 @@ Restart the terminal when it finishes.
 2. Creates symlinks with `dot self install`.
 3. Installs [TPM](https://github.com/tmux-plugins/tpm) and tmux plugins.
 4. Runs `brew bundle` with `os/mac/brew/Brewfile`.
-5. Symlinks AeroSpace and SketchyBar config into `~/.config`.
+5. Restores Lazy.nvim plugins to the versions in `lazy-lock.json`.
+6. Verifies required symlinks and commands, including Node.js, npm, and Marksman.
 
 ## Manual install
 
@@ -41,7 +41,10 @@ cd ~/.dotfiles
 git submodule update --init --recursive modules/dotly
 DOTFILES_PATH="$HOME/.dotfiles" DOTLY_PATH="$DOTFILES_PATH/modules/dotly" "$DOTLY_PATH/bin/dot" self install
 git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
+~/.tmux/plugins/tpm/bin/install_plugins
 brew bundle --file="$HOME/.dotfiles/os/mac/brew/Brewfile"
+nvim --headless "+Lazy! restore" "+qall"
+DOTFILES_VERIFY_STRICT=1 "$HOME/.dotfiles/restoration_scripts/01-verify-install.sh"
 ```
 
 ## Post-install
@@ -133,6 +136,7 @@ Current workspace model:
 
 ## Documentation
 
+- [Neovim](doc/neovim.md): restoration, Markdown dependencies, verification, and troubleshooting.
 - [Window management](doc/window-management.md): AeroSpace + SketchyBar + Raycast ownership model, hotkeys, and troubleshooting.
 
 ## Verification checklist
@@ -145,6 +149,7 @@ Current workspace model:
 - [ ] `Alt+B` shows/hides SketchyBar and adjusts the AeroSpace top gap.
 - [ ] The focused window has a rounded periwinkle border from `borders`.
 - [ ] `nvim` opens without plugin errors.
+- [ ] `marksman` is attached to Markdown buffers (`:LspInfo`) and `<leader>mp` opens a browser preview.
 - [ ] `tmux` starts and the prefix is `Ctrl+a`.
 - [ ] Claude Code and OpenCode restart with tmux agent status hooks/plugins loaded.
 - [ ] `~/.claude/settings.json` and `~/.config/opencode/plugins/tmux-agent-status.ts` are symlinks into `~/.dotfiles`.
@@ -155,5 +160,5 @@ Current workspace model:
 ## Known notes
 
 - The Brewfile uses `python@3.13` as the stable Python formula.
-- Some `brew bundle` packages may fail because of manual dependencies; review the output and retry.
+- The restore stops on missing required dependencies or failed verification; fix the reported error before continuing.
 - Homebrew may require explicit trust for third-party taps before installing or updating packages. For AeroSpace, run: `brew trust nikitabobko/tap`.
