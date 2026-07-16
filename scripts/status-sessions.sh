@@ -1,22 +1,33 @@
 #!/usr/bin/env bash
-# Muestra las sesiones de tmux como pestañas de proyectos
+# Muestra el contexto de la sesión actual y cuántas sesiones adicionales hay.
 # Uso: ~/.dotfiles/scripts/status-sessions.sh <session_actual>
 
 current="$1"
 bar_bg="#0b0f1a"
+max_visible_sessions=3
 
-format_session_name() {
+compact_session_name() {
 	local name="$1"
-	local max_length=26
-	local head_length=14
-	local tail_length=9
+	local max_length=14
+	local normalized first_word last_word
+	local -a words
 
 	if [ "${#name}" -le "$max_length" ]; then
 		printf '%s' "$name"
 		return
 	fi
 
-	printf '%s…%s' "${name:0:$head_length}" "${name: -$tail_length}"
+	normalized="${name//[_-]/ }"
+	read -r -a words <<< "$normalized"
+	first_word="${words[0]}"
+	last_word="${words[${#words[@]} - 1]}"
+
+	if [ "${#words[@]}" -gt 1 ]; then
+		printf '%s…%s' "${first_word:0:8}" "${last_word:0:4}"
+		return
+	fi
+
+	printf '%s…%s' "${name:0:8}" "${name: -4}"
 }
 
 session_status() {
@@ -46,41 +57,61 @@ status_dot() {
 	esac
 }
 
-tab_bg() {
-	local is_current="$1"
+render_session_tab() {
+	local session="$1"
+	local is_current="$2"
+	local display_name state dot
 
 	if [ "$is_current" = "true" ]; then
-		printf '#363a4f'
-	else
-		printf '#1f2438'
+		display_name="$session"
+		state="$(session_status "$session")"
+		dot="$(status_dot "$state")"
+		echo -n " #[bg=$bar_bg,fg=#363a4f]#[bg=#363a4f,fg=#cad3f5,bold]  $dot #[bg=#363a4f,fg=#cad3f5,bold]$display_name  #[bg=$bar_bg,fg=#363a4f]"
+		return
 	fi
+
+	display_name="$(compact_session_name "$session")"
+	echo -n " #[bg=$bar_bg,fg=#1f2438]#[bg=#1f2438,fg=#9aa3bc] $display_name #[bg=$bar_bg,fg=#1f2438]"
 }
 
-tab_fg() {
-	local is_current="$1"
+sessions=()
+while IFS= read -r session; do
+	[[ -n "$session" ]] && sessions+=("$session")
+done < <(
+	tmux list-sessions -f '#{?#{m:_*,#{session_name}},0,1}' -F '#{session_created} #{session_name}' 2>/dev/null \
+		| sort -n \
+		| cut -d ' ' -f 2-
+)
 
-	if [ "$is_current" = "true" ]; then
-		printf '#cad3f5'
-	else
-		printf '#9aa3bc'
-	fi
-}
-
-tmux list-sessions -f '#{?#{m:_*,#{session_name}},0,1}' -F '#{session_created} #{session_name}' 2>/dev/null \
-	| sort -n \
-	| cut -d ' ' -f 2- \
-	| while IFS= read -r session; do
-	display_name="$(format_session_name "$session")"
-	state="$(session_status "$session")"
-	dot="$(status_dot "$state")"
-
-	if [ "$session" = "$current" ]; then
-		bg="$(tab_bg true)"
-		fg="$(tab_fg true)"
-		echo -n "#[bg=$bar_bg,fg=$bg]#[bg=$bg,fg=$fg,bold]  $dot #[bg=$bg,fg=$fg,bold]$display_name  #[bg=$bar_bg,fg=$bg] "
-	else
-		bg="$(tab_bg false)"
-		fg="$(tab_fg false)"
-		echo -n "#[bg=$bar_bg,fg=$bg]#[bg=$bg,fg=$fg]  $dot #[bg=$bg,fg=$fg]$display_name  #[bg=$bar_bg,fg=$bg] "
+session_count=${#sessions[@]}
+current_index=-1
+for i in "${!sessions[@]}"; do
+	if [[ "${sessions[$i]}" = "$current" ]]; then
+		current_index=$i
+		break
 	fi
 done
+
+if ((current_index == -1 || session_count == 1)); then
+	render_session_tab "$current" true
+	visible_sessions=1
+elif ((session_count == 2)); then
+	render_session_tab "$current" true
+	render_session_tab "${sessions[$(((current_index + 1) % session_count))]}" false
+	visible_sessions=2
+else
+	previous_index=$(((current_index - 1 + session_count) % session_count))
+	next_index=$(((current_index + 1) % session_count))
+	render_session_tab "${sessions[$previous_index]}" false
+	render_session_tab "$current" true
+	render_session_tab "${sessions[$next_index]}" false
+	visible_sessions=$max_visible_sessions
+fi
+
+remaining_sessions=$((session_count - visible_sessions))
+
+if [ "$remaining_sessions" -gt 0 ]; then
+	echo -n " #[fg=#9aa3bc]+$remaining_sessions"
+fi
+
+echo -n ' '
