@@ -8,6 +8,72 @@ set -euo pipefail
 
 CURRENT="${1:-}"
 PANEDIR="${2:-$HOME}"
+CLIENT_WIDTH="${3:-$(tmux display-message -p '#{client_width}' 2>/dev/null || printf '108')}"
+
+if ! [[ "$CLIENT_WIDTH" =~ ^[0-9]+$ ]]; then
+    CLIENT_WIDTH=108
+fi
+
+active_tool() {
+    local window_name="$1"
+    local command="$2"
+    local pane_title="$3"
+
+    case "$pane_title" in
+    π*) printf 'pi' ;;
+    *)
+        case "$window_name" in
+        opencode | nvim | claude | pi) printf '%s' "$window_name" ;;
+        *) printf '%s' "$command" ;;
+        esac
+        ;;
+    esac
+}
+
+project_name() {
+    local path="${1%/}"
+
+    if [[ -z "$path" || "$path" == "/" ]]; then
+        printf '/'
+        return
+    fi
+
+    printf '%s' "${path##*/}"
+}
+
+calculate_popup_width() {
+    local name window_count attached path window_name command pane_title tool project
+    local name_width=18
+    local tool_width=8
+    local project_width=8
+    local content_width minimum_width=96 maximum_width desired_width
+
+    while IFS=$'\t' read -r name window_count attached path window_name command pane_title; do
+        tool="$(active_tool "$window_name" "$command" "$pane_title")"
+        project="$(project_name "$path")"
+        ((${#name} > name_width)) && name_width=${#name}
+        ((${#tool} > tool_width)) && tool_width=${#tool}
+        ((${#project} > project_width)) && project_width=${#project}
+    done < "$SPFILE"
+
+    # Includes selector gutters, the active marker, icons, state badge, and borders.
+    content_width=$((name_width + tool_width + project_width + 30))
+    maximum_width=$((CLIENT_WIDTH - 4))
+    desired_width=$content_width
+
+    if ((maximum_width < minimum_width)); then
+        printf '%s' "$maximum_width"
+        return
+    fi
+
+    if ((desired_width < minimum_width)); then
+        desired_width=$minimum_width
+    elif ((desired_width > maximum_width)); then
+        desired_width=$maximum_width
+    fi
+
+    printf '%s' "$desired_width"
+}
 
 # Archivo temporal donde guardamos la lista de sesiones pre-capturada.
 # NO se borra aquí: lo limpia session-picker.sh al terminar.
@@ -27,12 +93,13 @@ if [[ ! -s "$SPFILE" ]]; then
 fi
 
 SESSION_COUNT=$(wc -l < "$SPFILE" | tr -d ' ')
+POPUP_WIDTH="$(calculate_popup_width)"
 
 # Abrir el popup con los datos pre-capturados.
 # session-picker.sh lee de $SPFILE y lo borra al terminar.
 exec tmux display-popup \
     -d "$PANEDIR" \
-    -w 104 -h 13 -b rounded \
+    -w "$POPUP_WIDTH" -h 13 -b rounded \
     -s "bg=#1d2021,fg=#d4be98" \
     -S "fg=#a9b665" \
     -T "  sessions · $SESSION_COUNT " \
