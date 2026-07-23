@@ -1,6 +1,6 @@
 # .dotfiles created with [dotly](https://github.com/CodelyTV/dotly)
 
-Personal Apple Silicon macOS setup: Neovim, tmux, Ghostty, LazyGit, AeroSpace, SketchyBar, Hammerspoon, Raycast, zsh, and Starship.
+Personal Apple Silicon macOS setup: Neovim, tmux, Ghostty, LazyGit, AeroSpace, SketchyBar, Hammerspoon, Raycast, Herdr, zsh, and Starship.
 
 ## Quick install
 
@@ -53,11 +53,12 @@ After `restore.sh`:
 
 1. **AeroSpace**: open the app once, grant Accessibility permissions, then run `aerospace reload-config`.
 2. **SketchyBar**: start or reload it with `brew services restart sketchybar` or `sketchybar --reload`.
-3. **JankyBorders**: installed as `borders`; AeroSpace starts it automatically with a rounded periwinkle focused-window border.
+3. **JankyBorders**: installed as `borders`; AeroSpace starts it automatically with a subtle rounded focused-window border.
 4. **Hammerspoon**: open the app once, grant Accessibility permissions, then reload config.
 5. **Raycast**: configure Window Management in the app and import/export Raycast settings when moving between machines.
-6. **Ghostty**: in Settings, use `JetBrainsMono Nerd Font` or `IosevkaTerm Nerd Font`.
-7. **AI agent status**: restart Claude Code and OpenCode so they reload the restored tmux status hooks/plugins.
+6. **Herdr**: install it separately if it is missing, then verify `~/.config/herdr/config.toml` points to the dotfiles copy.
+7. **Ghostty**: in Settings, use `JetBrainsMono Nerd Font` or `IosevkaTerm Nerd Font`.
+8. **AI agent status**: restart Claude Code and OpenCode so they reload the restored tmux status hooks/plugins.
 
 ## Accessibility permissions
 
@@ -78,9 +79,10 @@ This setup is intentionally simple and split by responsibility:
 |---------|----------------|
 | AeroSpace | Workspaces, tiling tree, default focus/move/resize hotkeys, monitor assignment, workspace-change SketchyBar trigger. |
 | Hammerspoon | Global keyboard input helpers only. No windows, layouts, workspaces, or app launchers. |
-| JankyBorders | Rounded focused-window highlight (`#89b4fa`, width `7.0`). |
+| JankyBorders | Subtle rounded focused-window highlight (`#7aa2f7`, width `2.5`). |
 | Raycast | One-shot centered floating-window placement and sizing. |
 | SketchyBar | Elegant top workspace bar with per-monitor workspace indicators. |
+| Herdr | Agent multiplexer UI and theme via versioned `config.toml`. |
 
 Important restore files:
 
@@ -90,7 +92,30 @@ Important restore files:
 | `editors/hammerspoon` | `~/.hammerspoon`, global input helpers only. |
 | `editors/raycast/README.md` | Raycast restore, hotkey, and export/import guidance. |
 | `editors/sketchybar` | `~/.config/sketchybar` |
+| `editors/herdr/config.toml` | `~/.config/herdr/config.toml` |
 | `scripts/wm/toggle-sketchybar.sh` | Toggles SketchyBar and updates AeroSpace's top gap. |
+
+## Herdr restore
+
+Herdr config is versioned in this repo and linked with dotly:
+
+| Repo path | Target / purpose |
+|-----------|------------------|
+| `editors/herdr/config.toml` | `~/.config/herdr/config.toml` |
+
+Current defaults:
+
+- Collapsed sidebar mode: `hidden`
+- Theme: `gruvbox`
+
+If Herdr is not installed yet, install it first with the official installer or your preferred package manager. After `dot self install`, launch `herdr` and press `Ctrl+b`, then `Shift+r` to reload the restored config.
+
+Quick verification:
+
+```bash
+test -L ~/.config/herdr/config.toml
+herdr --version
+```
 
 ## AI agent status restore
 
@@ -118,9 +143,10 @@ test -L ~/.config/opencode/plugins/tmux-agent-status.ts
 
 Visual defaults:
 
-- Focus border: JankyBorders `style=round`, `width=7.0`, active color `#89b4fa`.
+- Focus border: JankyBorders `style=round`, `width=2.5`, active color `#7aa2f7`.
 - AeroSpace gaps: inner `20px`, outer left/right `28px`, bottom `24px`.
 - SketchyBar top gap: `60px` when visible, `24px` when hidden.
+- Herdr sidebar: hidden when collapsed.
 
 Current workspace model:
 
@@ -147,7 +173,8 @@ Current workspace model:
 - [ ] `Alt+Shift+;`, then `F`, toggles a focused window between floating and tiling.
 - [ ] Your Raycast window-management shortcut centers a floating window.
 - [ ] `Alt+B` shows/hides SketchyBar and adjusts the AeroSpace top gap.
-- [ ] The focused window has a rounded periwinkle border from `borders`.
+- [ ] The focused window has a subtle rounded border from `borders`.
+- [ ] `herdr` opens and `~/.config/herdr/config.toml` is a symlink into `~/.dotfiles`.
 - [ ] `nvim` opens without plugin errors.
 - [ ] `marksman` is attached to Markdown buffers (`:LspInfo`) and `<leader>mp` opens a browser preview.
 - [ ] `tmux` starts and the prefix is `Ctrl+a`.

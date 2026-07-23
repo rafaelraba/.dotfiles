@@ -6,7 +6,7 @@ This setup keeps window management intentionally simple:
 - **Raycast** centers or resizes a floating window with native Window Management commands.
 - **Hammerspoon** owns global keyboard input helpers only; it does not manage windows.
 - **SketchyBar** displays workspace state and its toggle adjusts the AeroSpace top gap so windows never sit under the bar.
-- **JankyBorders** highlights the focused window with a rounded periwinkle active border.
+- **JankyBorders** highlights the focused window with a subtle rounded active border.
 
 ## Quick restore path
 
@@ -44,7 +44,7 @@ brew bundle --file="$HOME/.dotfiles/os/mac/brew/Brewfile" --no-lock
 
 | Area | Value |
 |------|-------|
-| Focus border | JankyBorders `style=round`, `width=7.0`, color `#89b4fa`. |
+| Focus border | JankyBorders `style=round`, `width=2.5`, active color `#7aa2f7`. |
 | Workspace active color | SketchyBar active workspace pill `#89b4fa`. |
 | Window gaps | AeroSpace inner `20px`, outer left/right `28px`, bottom `24px`. |
 | Bar spacing | `Alt+B` toggles top gap between `60px` visible and `24px` hidden. |
@@ -64,6 +64,7 @@ System Settings → Privacy & Security → Accessibility
 | `editors/hammerspoon` | `~/.hammerspoon` |
 | `editors/raycast/README.md` | Raycast restore, hotkey, and export/import guidance. |
 | `editors/sketchybar` | `~/.config/sketchybar` |
+| `editors/herdr/config.toml` | `~/.config/herdr/config.toml` |
 
 ## Workspace model
 
@@ -119,7 +120,7 @@ Manual checks:
 - [ ] Hammerspoon global input shortcuts work without taking window-management ownership.
 - [ ] Your Raycast window-management shortcut centers the floating window.
 - [ ] `Alt+B` shows/hides SketchyBar; windows move below it when shown and reclaim the space when hidden.
-- [ ] The focused window has a rounded periwinkle border from `borders`.
+- [ ] The focused window has a subtle rounded border from `borders`.
 
 ## Agent notes
 
@@ -128,3 +129,4 @@ Manual checks:
 - Keep Hammerspoon limited to global input helpers.
 - Keep AeroSpace bindings native unless there is a clear reason not to.
 - Keep explicit floating geometry in Raycast, not in AeroSpace scripts.
+- Keep the JankyBorders border subtle; current startup command is `style=round width=2.5 active_color=0xff7aa2f7 inactive_color=0x803b4261 background_color=0x00000000`.

@@ -12,6 +12,7 @@ Dotfiles personales de Rafael Raba, gestionados con [dotly](https://github.com/C
 ├── editors/            # Configuración de editores y herramientas de desarrollo
 │   ├── nvim/           # NeoVim (LazyVim) → symlink en ~/.config/nvim
 │   ├── tmux/           # Tmux → symlink en ~/.config/tmux
+│   ├── herdr/          # Herdr → symlink en ~/.config/herdr/config.toml
 │   ├── lazygit/        # LazyGit → symlink en ~/.config/lazygit
 │   ├── ghostty/        # Terminal Ghostty
 │   ├── vim/            # Vim legacy
@@ -68,6 +69,19 @@ Dotfiles personales de Rafael Raba, gestionados con [dotly](https://github.com/C
 - **Navegación:** hjkl entre paneles
 - **Popups:** `Ctrl+a p` (popup), `F12` (scratch flotante)
 - **Status bar:** oculta por defecto, toggle con `Ctrl+a b`
+
+## Herdr
+
+- **Config:** `editors/herdr/config.toml` → symlink en `~/.config/herdr/config.toml`
+- **Sidebar:** `sidebar_collapsed_mode = "hidden"` para ocultar por completo la barra colapsada
+- **Tema:** `gruvbox`
+- **Recarga:** `Ctrl+b`, `Shift+r` dentro de Herdr
+
+## AeroSpace + JankyBorders
+
+- **Bordes:** AeroSpace lanza JankyBorders al iniciar
+- **Estilo actual:** borde sutil `style=round`, `width=2.5`, `active_color=0xff7aa2f7`
+- **Config principal:** `editors/aerospace/aerospace.toml`
 
 ## Git
 
