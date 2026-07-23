@@ -1,0 +1,6 @@
+[ui]
+sidebar_collapsed_mode = "hidden"
+
+[theme]
+name = "gruvbox"
+auto_switch = false
