@@ -18,6 +18,14 @@ check() {
   fi
 }
 
+check_contains() {
+  local expected="$1" actual="$2" label="$3"
+  if [[ "$actual" != *"$expected"* ]]; then
+    printf 'FAIL: %s (expected output containing %s, got %s)\n' "$label" "$expected" "$actual" >&2
+    fail=1
+  fi
+}
+
 # Missing config and state paths must use defaults and create state safely.
 check running "$("$SCRIPT" set running alpha %1 adapter 1 && "$SCRIPT" get alpha)" 'missing config fallback'
 
@@ -74,6 +82,40 @@ check $'state=blocked\tblocked=1\tdone=1' "$("$SCRIPT" summary mixed)" 'aggregat
 # Symbols and labels remain semantically distinct without color.
 check '? permission' "$(AGENT_STATUS_CONFIG="$TMP/order.conf" bash -c 'source "$1"; printf "%s %s" "$(agent_status_state_symbol permission)" "$(agent_status_state_label permission)"' _ "$ORDER")" 'permission no-color marker'
 check '… input' "$(AGENT_STATUS_CONFIG="$TMP/order.conf" bash -c 'source "$1"; printf "%s %s" "$(agent_status_state_symbol waiting_for_input)" "$(agent_status_state_label waiting_for_input)"' _ "$ORDER")" 'input no-color marker'
+
+# The active tab describes tracked records after the session name without
+# repeating its dominant state or showing a singular count.
+FAKE_BIN="$TMP/bin"
+mkdir -p "$FAKE_BIN"
+cat >"$FAKE_BIN/tmux" <<'EOF'
+#!/usr/bin/env bash
+case "$1" in
+  list-sessions) printf '1 rafaba\n' ;;
+  list-panes) printf '%%7\n%%8\n' ;;
+esac
+EOF
+chmod +x "$FAKE_BIN/tmux"
+render_tab() {
+  PATH="$FAKE_BIN:$PATH" "$ROOT/scripts/status-sessions.sh" rafaba
+}
+
+"$SCRIPT" clear rafaba
+"$SCRIPT" set done rafaba %7 adapter 1
+single_tab="$(render_tab)"
+check_contains 'rafaba · done' "$single_tab" 'singular tracked record suppresses count'
+[[ "$single_tab" != *'done:rafaba'* && "$single_tab" != *'+ done'* ]] || fail=1
+
+"$SCRIPT" clear rafaba
+"$SCRIPT" set done rafaba %7 adapter 1
+"$SCRIPT" set done rafaba %8 adapter 1
+check_contains 'rafaba · 2 done' "$(render_tab)" 'plural tracked records render count'
+
+"$SCRIPT" clear rafaba
+"$SCRIPT" set done rafaba %7 adapter 1
+"$SCRIPT" set running rafaba %8 adapter 1
+mixed_tab="$(render_tab)"
+check_contains 'rafaba · 1 done · 1 running' "$mixed_tab" 'mixed record counts use ordered separators'
+check_contains '[● rafaba · 1 done · 1 running]' "$(NO_COLOR=1 render_tab)" 'no-color active tab remains readable'
 
 if ((fail)); then
   exit 1

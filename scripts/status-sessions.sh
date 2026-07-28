@@ -65,30 +65,55 @@ status_dot() {
 	esac
 }
 
+format_active_session_status() {
+	local session="$1" state="$2" counts="$3" entry count label total=0
+	local -a labels=()
+
+	for entry in $counts; do
+		label="${entry%%=*}"
+		count="${entry#*=}"
+		[[ "$count" =~ ^[0-9]+$ ]] || continue
+		label="$(agent_status_state_label "$label")"
+		((total += count))
+		labels+=("$count $label")
+	done
+
+	if ((total == 1)); then
+		printf '%s · %s' "$session" "$(agent_status_state_label "$state")"
+	elif ((${#labels[@]} > 0)); then
+		printf '%s' "$session"
+		for label in "${labels[@]}"; do
+			printf ' · %s' "$label"
+		done
+	else
+		printf '%s · %s' "$session" "$(agent_status_state_label "$state")"
+	fi
+}
+
 render_session_tab() {
 	local session="$1"
 	local is_current="$2"
-	local display_name summary state dot counts symbol label
+	local display_name summary state dot counts symbol active_status
 	summary="$(session_status "$session")"
 	state="${summary#state=}"
 	state="${state%%$'\t'*}"
 	counts="${summary#*$'\t'}"
 	[[ "$counts" == "$summary" ]] && counts=""
-	symbol="$(agent_status_state_symbol "$state")"
-	label="$(agent_status_state_label "$state")"
+	active_status="$(format_active_session_status "$session" "$state" "$counts")"
 	if [[ -n "${NO_COLOR:-}${AGENT_STATUS_NO_COLOR:-}" ]]; then
-		printf ' [%s %s:%s%s] ' "$symbol" "$label" "$session" "${counts:+ $counts}"
+		printf ' [● %s] ' "$active_status"
 		return
 	fi
 
 	if [ "$is_current" = "true" ]; then
 		display_name="$session"
 		dot="$(status_dot "$state")"
-		echo -n " #[bg=$bar_bg,fg=#363a4f]#[bg=#363a4f,fg=#cad3f5,bold]  $dot #[bg=#363a4f,fg=#cad3f5,bold]$symbol $label:$display_name${counts:+ $counts}  #[bg=$bar_bg,fg=#363a4f]"
+		echo -n " #[bg=$bar_bg,fg=#363a4f]#[bg=#363a4f,fg=#cad3f5,bold]  $dot #[bg=#363a4f,fg=#cad3f5,bold]$active_status  #[bg=$bar_bg,fg=#363a4f]"
 		return
 	fi
 
 	display_name="$(compact_session_name "$session")"
+	symbol="$(agent_status_state_symbol "$state")"
 	echo -n " #[bg=$bar_bg,fg=#1f2438]#[bg=#1f2438,fg=#9aa3bc] $symbol $display_name #[bg=$bar_bg,fg=#1f2438]"
 }
 
