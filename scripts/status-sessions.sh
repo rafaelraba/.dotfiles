@@ -5,6 +5,12 @@
 current="$1"
 bar_bg="#0b0f1a"
 max_visible_sessions=3
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=agent-status/config.sh
+source "$ROOT/agent-status/config.sh"
+# shellcheck source=agent-status/order.sh
+source "$ROOT/agent-status/order.sh"
+agent_status_load_config || exit 0
 
 compact_session_name() {
 	local name="$1"
@@ -31,7 +37,7 @@ compact_session_name() {
 }
 
 session_status() {
-	~/.dotfiles/scripts/agent-status.sh get "$1" 2>/dev/null || printf 'idle\n'
+	"$ROOT/agent-status.sh" summary "$1" 2>/dev/null || printf 'state=idle\n'
 }
 
 status_bg() {
@@ -39,6 +45,8 @@ status_bg() {
 
 	case "$state" in
 		running) printf '#8aadf4' ;;
+		permission) printf '#eed49f' ;;
+		waiting_for_input) printf '#f5a97f' ;;
 		blocked) printf '#eed49f' ;;
 		done) printf '#a6da95' ;;
 		error) printf '#ed8796' ;;
@@ -52,26 +60,36 @@ status_dot() {
 	color="$(status_bg "$state")"
 
 	case "$1" in
-		running | blocked | done | error) printf '#[fg=%s]●' "$color" ;;
-		*) printf '#[fg=#3b4261]●' ;;
+		idle) printf '#[fg=#3b4261]●' ;;
+		*) printf '#[fg=%s]●' "$color" ;;
 	esac
 }
 
 render_session_tab() {
 	local session="$1"
 	local is_current="$2"
-	local display_name state dot
+	local display_name summary state dot counts symbol label
+	summary="$(session_status "$session")"
+	state="${summary#state=}"
+	state="${state%%$'\t'*}"
+	counts="${summary#*$'\t'}"
+	[[ "$counts" == "$summary" ]] && counts=""
+	symbol="$(agent_status_state_symbol "$state")"
+	label="$(agent_status_state_label "$state")"
+	if [[ -n "${NO_COLOR:-}${AGENT_STATUS_NO_COLOR:-}" ]]; then
+		printf ' [%s %s:%s%s] ' "$symbol" "$label" "$session" "${counts:+ $counts}"
+		return
+	fi
 
 	if [ "$is_current" = "true" ]; then
 		display_name="$session"
-		state="$(session_status "$session")"
 		dot="$(status_dot "$state")"
-		echo -n " #[bg=$bar_bg,fg=#363a4f]#[bg=#363a4f,fg=#cad3f5,bold]  $dot #[bg=#363a4f,fg=#cad3f5,bold]$display_name  #[bg=$bar_bg,fg=#363a4f]"
+		echo -n " #[bg=$bar_bg,fg=#363a4f]#[bg=#363a4f,fg=#cad3f5,bold]  $dot #[bg=#363a4f,fg=#cad3f5,bold]$symbol $label:$display_name${counts:+ $counts}  #[bg=$bar_bg,fg=#363a4f]"
 		return
 	fi
 
 	display_name="$(compact_session_name "$session")"
-	echo -n " #[bg=$bar_bg,fg=#1f2438]#[bg=#1f2438,fg=#9aa3bc] $display_name #[bg=$bar_bg,fg=#1f2438]"
+	echo -n " #[bg=$bar_bg,fg=#1f2438]#[bg=#1f2438,fg=#9aa3bc] $symbol $display_name #[bg=$bar_bg,fg=#1f2438]"
 }
 
 sessions=()
@@ -79,8 +97,8 @@ while IFS= read -r session; do
 	[[ -n "$session" ]] && sessions+=("$session")
 done < <(
 	tmux list-sessions -f '#{?#{m:_*,#{session_name}},0,1}' -F '#{session_created} #{session_name}' 2>/dev/null \
-		| sort -n \
-		| cut -d ' ' -f 2-
+		| cut -d ' ' -f 2- \
+		| agent_status_order_sessions
 )
 
 session_count=${#sessions[@]}

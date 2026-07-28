@@ -13,6 +13,12 @@ set -euo pipefail
 
 current="${1:-$(tmux display-message -p '#S' 2>/dev/null || true)}"
 sessions_file="${2:-}"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=agent-status/config.sh
+source "$ROOT/agent-status/config.sh"
+# shellcheck source=agent-status/order.sh
+source "$ROOT/agent-status/order.sh"
+agent_status_load_config || exit 0
 
 # Gruvbox Material dark hard.
 BG="#1d2021"
@@ -33,7 +39,7 @@ FZF_COLORS="${FZF_COLORS},header:${SUBTLE},pointer:${ORANGE},marker:${FG_ACTIVE}
 FZF_COLORS="${FZF_COLORS},spinner:${BLUE},info:${SUBTLE},query:${FG_ACTIVE},separator:${SUBTLE},scrollbar:${SUBTLE}"
 
 agent_state() {
-	~/.dotfiles/scripts/agent-status.sh get "$1" 2>/dev/null || printf 'idle\n'
+	"$ROOT/agent-status.sh" summary "$1" 2>/dev/null || printf 'state=idle\n'
 }
 
 state_color() {
@@ -82,11 +88,11 @@ initial_selection_position() {
 	if [[ -n "${sessions_file:-}" && -r "$sessions_file" ]]; then
 		while IFS=$'\t' read -r name _; do
 			[[ -n "$name" ]] && names+=("$name")
-		done < "$sessions_file"
+		done < <(agent_status_order_session_rows < "$sessions_file")
 	else
 		while IFS= read -r name; do
 			[[ -n "$name" ]] && names+=("$name")
-		done < <(tmux list-sessions -f '#{?#{m:_*,#{session_name}},0,1}' -F '#{session_name}' 2>/dev/null)
+		done < <(tmux list-sessions -f '#{?#{m:_*,#{session_name}},0,1}' -F '#{session_name}' 2>/dev/null | agent_status_order_sessions)
 	fi
 
 	count=${#names[@]}
@@ -116,7 +122,7 @@ session_rows() {
 	local tools=()
 	local name path window_name command pane_title tool project
 	local current_index=-1
-	local count start offset i state state_color name_width tool_width project_width
+	local count start offset i summary state state_color symbol label name_width tool_width project_width
 
 	# Leer sesiones desde archivo pre-capturado o consultar tmux directamente
 	if [[ -n "${sessions_file:-}" && -r "$sessions_file" ]]; then
@@ -128,7 +134,7 @@ session_rows() {
 			names+=("$name")
 			tools+=("$(active_tool "$window_name" "$command" "$pane_title")")
 			projects+=("$(project_name "$path")")
-		done < "$sessions_file"
+		done < <(agent_status_order_session_rows < "$sessions_file")
 	else
 		while IFS=$'\t' read -r name _ _ path window_name command pane_title; do
 			[[ -n "$name" ]] || continue
@@ -141,7 +147,8 @@ session_rows() {
 		done < <(
 			tmux list-sessions \
 				-f '#{?#{m:_*,#{session_name}},0,1}' \
-				-F $'#{session_name}\t#{session_windows}\t#{session_attached}\t#{pane_current_path}\t#{window_name}\t#{pane_current_command}\t#{pane_title}' 2>/dev/null
+				-F $'#{session_name}\t#{session_windows}\t#{session_attached}\t#{pane_current_path}\t#{window_name}\t#{pane_current_command}\t#{pane_title}' 2>/dev/null \
+				| agent_status_order_session_rows
 		)
 	fi
 
@@ -177,8 +184,12 @@ session_rows() {
 		name="${names[$i]}"
 		tool="${tools[$i]}"
 		project="${projects[$i]}"
-		state="$(agent_state "$name")"
+		summary="$(agent_state "$name")"
+		state="${summary#state=}"
+		state="${state%%$'\t'*}"
 		state_color="$(state_color "$state")"
+		symbol="$(agent_status_state_symbol "$state")"
+		label="$(agent_status_state_label "$state")"
 
 		if [[ "$name" == "$current" ]]; then
 			# The active session is a distinct visual layer, not a state color.
@@ -192,8 +203,12 @@ session_rows() {
 		fi
 		win_color="38;2;125;174;163"
 
-		printf '%s\t%s%s\033[%sm%-*s  \033[38;2;125;174;163m%-*s  \033[38;2;146;131;116m󰉋 %-*s  \033[38;2;%sm● %-8s\033[0m\n' \
-			"$name" "$row_prefix" "$marker" "$name_color" "$name_width" "$name" "$tool_width" "$tool" "$project_width" "$project" "$state_color" "$state"
+		if [[ -n "${NO_COLOR:-}${AGENT_STATUS_NO_COLOR:-}" ]]; then
+			printf '%s\t%s%-*s  %-*s  %-*s  %s %s\n' "$name" "$marker" "$name_width" "$name" "$tool_width" "$tool" "$project_width" "$project" "$symbol" "$label"
+		else
+			printf '%s\t%s%s\033[%sm%-*s  \033[38;2;125;174;163m%-*s  \033[38;2;146;131;116m󰉋 %-*s  \033[38;2;%sm%s %-8s\033[0m\n' \
+				"$name" "$row_prefix" "$marker" "$name_color" "$name_width" "$name" "$tool_width" "$tool" "$project_width" "$project" "$state_color" "$symbol" "$label"
+		fi
 	done
 }
 
