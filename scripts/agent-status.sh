@@ -16,16 +16,21 @@ set -euo pipefail
 #   done         Agent finished and needs review/attention.
 #   error        Agent needs attention because something failed.
 
-readonly STATUS_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/agent-status"
-readonly SESSION_DIR="$STATUS_DIR/sessions"
-readonly PANE_DIR="$STATUS_DIR/panes"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=agent-status/config.sh
+source "$ROOT/agent-status/config.sh"
+# shellcheck source=agent-status/store.sh
+source "$ROOT/agent-status/store.sh"
+agent_status_load_config || { printf 'Invalid agent-status configuration.\n' >&2; exit 1; }
 
 usage() {
 	cat >&2 <<'EOF'
 Usage:
-  agent-status.sh set <running|blocked|done|idle|error> [session] [pane]
+  agent-status.sh set <state> [session] [pane] [source] [event_id]
   agent-status.sh get [session]
   agent-status.sh clear [session] [pane]
+  agent-status.sh inspect [session] [pane]
+  agent-status.sh doctor
 EOF
 }
 
@@ -82,28 +87,18 @@ resolve_pane() {
 	printf '%s' "$pane"
 }
 
-validate_state() {
-	case "$1" in
-	running | blocked | done | idle | error) return 0 ;;
-	*)
-		printf 'Invalid state: %s\n' "$1" >&2
-		usage
-		exit 1
-		;;
-	esac
-}
-
 normalize_state() {
 	case "$1" in
-	triage | needs_input | permission) printf 'blocked' ;;
-	running | blocked | done | idle | error) printf '%s' "$1" ;;
-	*) printf 'idle' ;;
+	permission|waiting_for_input|running|blocked|done|idle|error) printf '%s' "$1" ;;
+	*) printf 'blocked' ;;
 	esac
 }
 
 state_priority() {
 	case "$1" in
-	error) printf '50' ;;
+	error) printf '70' ;;
+	permission) printf '60' ;;
+	waiting_for_input) printf '50' ;;
 	blocked) printf '40' ;;
 	done) printf '30' ;;
 	running) printf '20' ;;
@@ -126,21 +121,19 @@ is_live_pane() {
 
 aggregate_session_state() {
 	local session="$1"
-	local safe_session live_panes
+	local safe_session live_panes tmux_available=1
 	safe_session="$(sanitize_session "$session")"
 	local best_state="idle"
 	local best_priority=10
 	local file pane state priority
 
 	if ! live_panes="$(tmux list-panes -t "$session" -F '#{pane_id}' 2>/dev/null)"; then
-		printf '%s\n' "$best_state"
-		return
+		tmux_available=0
 	fi
 
 	file="$(status_file "$session")"
 	if [[ -f "$file" ]]; then
-		read -r state <"$file"
-		state="$(normalize_state "$state")"
+		state="$(store_effective "$file")"
 		priority="$(state_priority "$state")"
 		if ((priority > best_priority)); then
 			best_state="$state"
@@ -151,13 +144,12 @@ aggregate_session_state() {
 	for file in "$PANE_DIR/${safe_session}_"*; do
 		[[ -f "$file" ]] || continue
 		pane="${file##*/${safe_session}_}"
-		if ! is_live_pane "$pane" "$live_panes"; then
+		if ((tmux_available)) && ! is_live_pane "$pane" "$live_panes"; then
 			rm -f "$file"
 			continue
 		fi
 
-		read -r state <"$file"
-		state="$(normalize_state "$state")"
+		state="$(store_effective "$file")"
 		priority="$(state_priority "$state")"
 		if ((priority > best_priority)); then
 			best_state="$state"
@@ -175,15 +167,9 @@ case "$command" in
 set)
 	state="${1:-}"
 	shift || true
-	validate_state "$state"
 	session="$(resolve_session "${1:-}")"
 	pane="$(resolve_pane "${2:-}")"
-	mkdir -p "$SESSION_DIR" "$PANE_DIR"
-	if [[ -n "$pane" ]]; then
-		printf '%s\n' "$state" >"$(pane_file "$session" "$pane")"
-	else
-		printf '%s\n' "$state" >"$(status_file "$session")"
-	fi
+	store_set "$state" "$session" "$pane" "${3:-unknown}" "${4:-0}"
 	;;
 get)
 	session="$(resolve_session "${1:-}")"
@@ -192,11 +178,16 @@ get)
 clear)
 	session="$(resolve_session "${1:-}")"
 	pane="$(resolve_pane "${2:-}")"
-	if [[ -n "$pane" ]]; then
-		rm -f "$(pane_file "$session" "$pane")"
-	else
-		rm -f "$(status_file "$session")" "$PANE_DIR/$(sanitize_session "$session")_"*
-	fi
+	store_clear "$session" "$pane"
+	;;
+	inspect)
+		session="$(resolve_session "${1:-}")"
+		pane="$(resolve_pane "${2:-}")"
+		file="$(store_path "$session" "$pane")"
+		store_inspect "$file"
+		;;
+	doctor)
+	printf 'config_version\t%s\nstate_dir\t%s\n' "$AGENT_STATUS_CONFIG_VERSION" "$STATUS_DIR"
 	;;
 *)
 	usage
