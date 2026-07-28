@@ -58,7 +58,32 @@ check idle "$("$SCRIPT" get malformed)" 'malformed record recovery'
 wait
 check done "$("$SCRIPT" get race)" 'last accepted event'
 
-# Configured sessions must remain first and unknown sessions must use lexical order.
+# The OpenCode adapter supplies its source and a monotonic process-local event ID
+# while leaving tmux identity resolution to the protocol script.
+ADAPTER_BIN="$TMP/adapter-bin"
+mkdir -p "$ADAPTER_BIN"
+cat >"$ADAPTER_BIN/tmux" <<'EOF'
+#!/usr/bin/env bash
+case "$*" in
+  *'#S'*) printf 'adapter-session\n' ;;
+  *'#{pane_id}'*) printf '%%42\n' ;;
+esac
+EOF
+chmod +x "$ADAPTER_BIN/tmux"
+"$SCRIPT" set idle adapter-session %42 previous 999
+HOME=/Users/rafaba TMUX=/tmp/tmux-test TMUX_PANE= PATH="$ADAPTER_BIN:$PATH" bun -e '
+  Date.now = () => 1000
+  const plugin = (await import(process.argv[1])).TmuxAgentStatusPlugin
+  const hooks = await plugin({})
+  await hooks["chat.message"]({ sessionID: "one" })
+  await hooks["chat.message"]({ sessionID: "two" })
+' "$ROOT/editors/opencode/plugins/tmux-agent-status.ts"
+IFS=$'\t' read -r _ adapter_state _ adapter_source adapter_event <"$XDG_CACHE_HOME/agent-status/panes/adapter-session__42"
+check running "$adapter_state" 'OpenCode event supersedes older record'
+check opencode "$adapter_source" 'OpenCode protocol source'
+check 1001 "$adapter_event" 'OpenCode same-millisecond monotonic event ID'
+
+# Configured sessions remain first and unknown sessions preserve source order.
 cat >"$TMP/order.conf" <<'EOF'
 AGENT_STATUS_CONFIG_VERSION=1
 AGENT_STATUS_SESSION_ORDER=(work main)
@@ -71,7 +96,7 @@ ordered_sessions() {
     printf "%s\n" zebra main alpha work beta | agent_status_order_sessions
   ' _ "$ROOT" "$ORDER"
 }
-check $'work\nmain\nalpha\nbeta\nzebra' "$(ordered_sessions)" 'configured lexical session order'
+check $'work\nmain\nzebra\nalpha\nbeta' "$(ordered_sessions)" 'configured stable session order'
 check "$(ordered_sessions)" "$(ordered_sessions)" 'restart-stable session order'
 
 # Aggregate summaries retain lower-priority state counts while exposing urgency.
@@ -91,8 +116,8 @@ cat >"$FAKE_BIN/tmux" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$TMUX_LOG"
 case "$1" in
-  list-sessions) printf '1 rafaba\n2 other\n' ;;
-  list-panes) printf 'rafaba\t0\tmain\t%%7\tbash\tmain\t/tmp\nrafaba\t1\tcode\t%%8\tclaude\tcode\t/tmp\nother\t0\twork\t%%13\tvim\twork\t/tmp\n' ;;
+  list-sessions) printf '20\t$3\tnewest\n10\t$2\tmiddle\n10\t$1\toldest\n' ;;
+  list-panes) printf 'oldest\t0\tmain\t%%7\tbash\tmain\t/tmp\noldest\t1\tcode\t%%8\tclaude\tcode\t/tmp\nmiddle\t0\twork\t%%13\tvim\twork\t/tmp\n' ;;
 esac
 EOF
 chmod +x "$FAKE_BIN/tmux"
@@ -100,22 +125,22 @@ render_tab() {
   TMUX_LOG="$TMUX_LOG" PATH="$FAKE_BIN:$PATH" "$ROOT/scripts/status-sessions.sh" "$1"
 }
 
-"$SCRIPT" clear rafaba
-"$SCRIPT" set done rafaba %7 adapter 1
-single_tab="$(render_tab rafaba)"
-check_contains 'rafaba' "$single_tab" 'tab includes session name'
+"$SCRIPT" clear oldest
+"$SCRIPT" set done oldest %7 adapter 1
+single_tab="$(render_tab oldest)"
+check_contains 'oldest' "$single_tab" 'tab includes session name'
 [[ "$single_tab" != *'done'* && "$single_tab" != *'running'* && "$single_tab" != *'1 '* ]] || fail=1
 check 1 "$(grep -c '^list-panes -a' "$TMUX_LOG" || true)" 'one bulk pane snapshot per status render'
-other_tab="$(render_tab other)"
-[[ "$single_tab" == *'other'*'rafaba'* && "$other_tab" == *'other'*'rafaba'* ]] || fail=1
-check_contains '#[fg=#a6da95]●#[fg=#ffffff] rafaba' "$single_tab" 'active point resets to white label'
-check_contains '#[fg=#3b4261]●#[fg=#ffffff] other' "$single_tab" 'inactive point resets to white label'
-[[ "$single_tab" != *'#[fg=#a6da95]● rafaba'* && "$single_tab" != *'#[fg=#3b4261]● other'* ]] || fail=1
-check_contains '[✓ rafaba]' "$(NO_COLOR=1 render_tab rafaba)" 'no-color tab keeps distinct marker'
+other_tab="$(render_tab middle)"
+[[ "$single_tab" == *'oldest'*'middle'*'newest'* && "$other_tab" == *'oldest'*'middle'*'newest'* ]] || fail=1
+check_contains '#[fg=#a6da95]●#[fg=#ffffff] oldest' "$single_tab" 'active point resets to white label'
+check_contains '#[fg=#3b4261]●#[fg=#ffffff] middle' "$single_tab" 'inactive point resets to white label'
+[[ "$single_tab" != *'#[fg=#a6da95]● oldest'* && "$single_tab" != *'#[fg=#3b4261]● middle'* ]] || fail=1
+check_contains '[✓ oldest]' "$(NO_COLOR=1 render_tab oldest)" 'no-color tab keeps distinct marker'
 
 # Timing instrumentation records every render for deterministic budget coverage.
 TIMING_FILE="$TMP/render-ms"
-for _ in $(seq 1 10); do AGENT_STATUS_TIMING_FILE="$TIMING_FILE" render_tab rafaba >/dev/null; done
+for _ in $(seq 1 10); do AGENT_STATUS_TIMING_FILE="$TIMING_FILE" render_tab oldest >/dev/null; done
 timing_count=0; [[ -f "$TIMING_FILE" ]] && timing_count="$(wc -l <"$TIMING_FILE" | tr -d ' ')"
 check 10 "$timing_count" 'ten render timing samples'
 
@@ -124,6 +149,7 @@ PICKER_BIN="$TMP/picker-bin" PICKER_LOG="$TMP/picker.log" PICKER_ROWS="$TMP/pick
 mkdir -p "$PICKER_BIN"
 cat >"$PICKER_BIN/fzf" <<'EOF'
 #!/usr/bin/env bash
+printf '%s\n' "$@" >"$PICKER_ARGS"
 input="$(cat)"; printf '%s\n' "$input" >>"$PICKER_LOG"; printf '%s\n' "$input" >"$PICKER_ROWS"; printf '%s\n' "$input" | grep "^${PICKER_SELECTION}" || true
 EOF
 cat >"$PICKER_BIN/tmux" <<'EOF'
@@ -133,7 +159,7 @@ case "$1" in list-panes) printf 'alpha\t0\tmain\t%%8\tcmd;$(touch nope)\ttitle\t
 EOF
 chmod +x "$PICKER_BIN/fzf" "$PICKER_BIN/tmux"
 { for n in $(seq 1 14); do printf 'alpha\t%s\twindow %s\t%%%s\tcmd-%s;$(touch nope)\ttitle\t/tmp/a b\n' "$n" "$n" "$n" "$n"; done; } >"$snapshot"
-PICKER_LOG="$PICKER_LOG" PICKER_ROWS="$PICKER_ROWS" PICKER_SELECTION=$'p\037%8' PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker.sh" alpha "$snapshot" >/dev/null 2>&1 || true
+PICKER_ARGS="$TMP/picker.args" PICKER_LOG="$PICKER_LOG" PICKER_ROWS="$PICKER_ROWS" PICKER_SELECTION=$'p\037%8' PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker.sh" alpha "$snapshot" >/dev/null 2>&1 || true
 check_contains '▾ alpha' "$(cat "$PICKER_LOG")" 'picker hierarchy session row'
 check_contains 'cmd-14;$(touch nope)' "$(cat "$PICKER_LOG")" 'picker keeps special command inert'
 check_contains 'switch-client -t %8' "$(cat "$PICKER_LOG")" 'picker switches selected pane'
@@ -141,13 +167,23 @@ visible_rows="$(cut -f2- "$PICKER_ROWS")"
 [[ "$visible_rows" != *'%8'* && "$visible_rows" != *'idle'* ]] || fail=1
 check_contains $'\033[38;2;146;131;116m●\033[0m cmd-14' "$visible_rows" 'picker state dot is color-scoped'
 check 1 "$(test -e nope; printf '%s' "$?")" 'picker does not execute command data'
+check_contains 'load:unbind(j,k,/),ctrl-v:change-prompt(  normal › )+rebind(j,k,/),j:down,k:up,/:change-prompt(  filter › )+unbind(j,k,/)' "$(cat "$TMP/picker.args")" 'hierarchy picker modal navigation bindings'
+check_contains 'Enter switch · ↑/↓ move · Ctrl-v j/k navigate · / search · Esc close' "$(cat "$TMP/picker.args")" 'picker modal help'
 : >"$PICKER_LOG"
-PICKER_LOG="$PICKER_LOG" PICKER_ROWS="$PICKER_ROWS" PICKER_SELECTION=$'s\037alpha' PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker.sh" alpha "$snapshot" >/dev/null 2>&1 || true
+PICKER_ARGS="$TMP/picker.args" PICKER_LOG="$PICKER_LOG" PICKER_ROWS="$PICKER_ROWS" PICKER_SELECTION=$'s\037alpha' PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker.sh" alpha "$snapshot" >/dev/null 2>&1 || true
 check_contains 'switch-client -t =alpha' "$(cat "$PICKER_LOG")" 'picker switches selected session'
 : >"$PICKER_LOG"
-PICKER_LOG="$PICKER_LOG" PICKER_ROWS="$PICKER_ROWS" PICKER_SELECTION=$'w\037alpha\0378' PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker.sh" alpha "$snapshot" >/dev/null 2>&1 || true
+PICKER_ARGS="$TMP/picker.args" PICKER_LOG="$PICKER_LOG" PICKER_ROWS="$PICKER_ROWS" PICKER_SELECTION=$'w\037alpha\0378' PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker.sh" alpha "$snapshot" >/dev/null 2>&1 || true
 check_contains 'switch-client -t =alpha' "$(cat "$PICKER_LOG")" 'picker switches selected window session'
 check_contains 'select-window -t :8' "$(cat "$PICKER_LOG")" 'picker switches selected window'
+legacy_snapshot="$TMP/sessions.tsv"
+printf 'alpha\t1\t1\t/tmp/a b\topencode\tbash\ttitle\nbeta\t1\t0\t/tmp/b\tnvim\tnvim\ttitle\n' >"$legacy_snapshot"
+: >"$PICKER_LOG"
+PICKER_ARGS="$TMP/picker.args" PICKER_LOG="$PICKER_LOG" PICKER_ROWS="$PICKER_ROWS" PICKER_SELECTION=beta PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker.sh" alpha "$legacy_snapshot" >/dev/null 2>&1 || true
+check_contains 'start:pos(2)' "$(cat "$TMP/picker.args")" 'session picker keeps initial position binding'
+check_contains 'load:unbind(j,k,/),ctrl-v:change-prompt(  normal › )+rebind(j,k,/),j:down,k:up,/:change-prompt(  filter › )+unbind(j,k,/)' "$(cat "$TMP/picker.args")" 'session picker modal navigation bindings'
+check_contains 'switch-client -t beta' "$(cat "$PICKER_LOG")" 'session picker Enter behavior'
+: >"$PICKER_LOG"
 PICKER_LOG="$PICKER_LOG" PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker-wrapper.sh" alpha /tmp >/dev/null || true
 check_contains 'display-popup -d /tmp -w 90% -h 80%' "$(cat "$PICKER_LOG")" 'picker popup percentage sizing'
 check 1 "$(grep -c '^list-panes -a' "$PICKER_LOG" || true)" 'picker opens with one bulk snapshot'

@@ -106,8 +106,9 @@ snapshot="$(tmux list-panes -a -F $'#{session_name}\t#{window_index}\t#{window_n
 while IFS= read -r session; do
 	[[ -n "$session" ]] && sessions+=("$session")
 done < <(
-	tmux list-sessions -f '#{?#{m:_*,#{session_name}},0,1}' -F '#{session_created} #{session_name}' 2>/dev/null \
-		| cut -d ' ' -f 2- \
+	tmux list-sessions -f '#{?#{m:_*,#{session_name}},0,1}' -F $'#{session_created}\t#{session_id}\t#{session_name}' 2>/dev/null \
+		| LC_ALL=C sort -t $'\t' -k1,1n -k2.2n \
+		| cut -f 3- \
 		| agent_status_order_sessions
 )
 
