@@ -16,9 +16,48 @@ sessions_file="${2:-}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=agent-status/config.sh
 source "$ROOT/agent-status/config.sh"
+# shellcheck source=agent-status/store.sh
+source "$ROOT/agent-status/store.sh"
 # shellcheck source=agent-status/order.sh
 source "$ROOT/agent-status/order.sh"
 agent_status_load_config || exit 0
+
+# Bulk snapshots have pane identity in field four; retain the legacy picker for
+# older session-list captures.
+IFS=$'\t' read -r _ _ _ snapshot_pane _ < "${sessions_file:-/dev/null}" || true
+if [[ "$snapshot_pane" == %* ]]; then
+	picker_state() {
+		local session="$1" pane="$2" safe_session
+		safe_session="$(printf '%s' "$session" | tr -c '[:alnum:]_.-' '_')"
+		store_effective "$PANE_DIR/${safe_session}_${pane//%/_}"
+	}
+	picker_dot_color() {
+		case "$1" in running) printf '125;174;163' ;; permission) printf '238;212;159' ;; waiting_for_input|blocked) printf '216;166;87' ;; done) printf '169;182;101' ;; error) printf '234;105;98' ;; *) printf '146;131;116' ;; esac
+	}
+	picker_rows() {
+		local last_session='' last_window='' session index window pane command title path state marker sep=$'\037'
+		while IFS=$'\t' read -r session index window pane command title path; do
+			[[ -n "$session" && "$pane" == %* ]] || continue
+			command="${command//$'\t'/ }"; title="${title//$'\t'/ }"; path="${path//$'\t'/ }"
+			if [[ "$session" != "$last_session" ]]; then
+				marker='  '; [[ "$session" == "$current" ]] && marker='› '
+				printf 's%s%s\t%s▾ %s\n' "$sep" "$session" "$marker" "$session"; last_session="$session"; last_window=''
+			fi
+			if [[ "$index:$window" != "$last_window" ]]; then printf 'w%s%s%s%s\t  ├─ %s · %s\n' "$sep" "$session" "$sep" "$index" "$index" "$window"; last_window="$index:$window"; fi
+			state="$(picker_state "$session" "$pane")"
+			printf 'p%s%s\t  │  \033[38;2;%sm●\033[0m %s%s\n' "$sep" "$pane" "$(picker_dot_color "$state")" "$command" "${path:+ · $path}"
+		done < <(agent_status_order_session_rows < "$sessions_file")
+	}
+	selected="$({ picker_rows || true; } | fzf --ansi --layout=reverse --no-border --delimiter=$'\t' --with-nth=2.. --prompt=' search panes › ' --header='Enter switch · ↑/↓ move · Esc close' --pointer='❯ ' --cycle --no-info --no-sort)" || exit 0
+	target="${selected%%$'\t'*}"
+	type="${target%%$'\037'*}"; payload="${target#*$'\037'}"
+	case "$type" in
+		s) tmux switch-client -t "=$payload" ;;
+		w) session="${payload%%$'\037'*}"; index="${payload#*$'\037'}"; tmux switch-client -t "=$session" && tmux select-window -t ":$index" ;;
+		p) tmux switch-client -t "$payload" ;;
+	esac
+	exit 0
+fi
 
 # Gruvbox Material dark hard.
 BG="#1d2021"

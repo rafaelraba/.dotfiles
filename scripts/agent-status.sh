@@ -23,6 +23,8 @@ source "$ROOT/agent-status/config.sh"
 source "$ROOT/agent-status/store.sh"
 # shellcheck source=agent-status/order.sh
 source "$ROOT/agent-status/order.sh"
+# shellcheck source=agent-status/notify.sh
+source "$ROOT/agent-status/notify.sh"
 agent_status_load_config || { printf 'Invalid agent-status configuration.\n' >&2; exit 1; }
 
 usage() {
@@ -110,77 +112,43 @@ state_priority() {
 	esac
 }
 
-is_live_pane() {
-	local pane="$1"
-	local live_panes="$2"
-	local live_pane
-
-	while IFS= read -r live_pane; do
-		[[ "$(sanitize_session "$live_pane")" = "$pane" ]] && return 0
-	done <<<"$live_panes"
-
-	return 1
-}
-
 aggregate_session_state() {
-	local session="$1"
-	local safe_session live_panes tmux_available=1
-	safe_session="$(sanitize_session "$session")"
-	local best_state="idle"
-	local best_priority=10
-	local file pane state priority
-
-	if ! live_panes="$(tmux list-panes -t "$session" -F '#{pane_id}' 2>/dev/null)"; then
-		tmux_available=0
+	local session="$1" row_session _ _ pane _ best_state=idle best_priority=10 state priority snapshot file matched=0
+	snapshot="$(store_bulk_snapshot)"
+	if [[ -n "$snapshot" ]]; then
+		while IFS=$'\t' read -r row_session _ _ pane _; do
+			[[ "$row_session" == "$session" ]] || continue; matched=1
+			state="$(store_effective "$(pane_file "$session" "$pane")")"; priority="$(state_priority "$state")"
+			((priority > best_priority)) && { best_state="$state"; best_priority="$priority"; }
+		done <<<"$snapshot"
 	fi
-
-	file="$(status_file "$session")"
-	if [[ -f "$file" ]]; then
-		state="$(store_effective "$file")"
-		priority="$(state_priority "$state")"
-		if ((priority > best_priority)); then
-			best_state="$state"
-			best_priority="$priority"
-		fi
+	if (( ! matched )); then
+		for file in "$PANE_DIR/$(sanitize_session "$session")_"*; do
+			[[ -f "$file" ]] || continue; state="$(store_effective "$file")"; priority="$(state_priority "$state")"
+			((priority > best_priority)) && { best_state="$state"; best_priority="$priority"; }
+		done
 	fi
-
-	for file in "$PANE_DIR/${safe_session}_"*; do
-		[[ -f "$file" ]] || continue
-		pane="${file##*/${safe_session}_}"
-		if ((tmux_available)) && ! is_live_pane "$pane" "$live_panes"; then
-			rm -f "$file"
-			continue
-		fi
-
-		state="$(store_effective "$file")"
-		priority="$(state_priority "$state")"
-		if ((priority > best_priority)); then
-			best_state="$state"
-			best_priority="$priority"
-		fi
-	done
-
+	state="$(store_effective "$(status_file "$session")")"
+	priority="$(state_priority "$state")"
+	((priority > best_priority)) && best_state="$state"
 	printf '%s\n' "$best_state"
 }
 
 aggregate_session_count() {
-  local session="$1" wanted="$2" safe_session file pane live_panes tmux_available=1 count=0 state
-  safe_session="$(sanitize_session "$session")"
-  if ! live_panes="$(tmux list-panes -t "$session" -F '#{pane_id}' 2>/dev/null)"; then
-    tmux_available=0
+  local session="$1" wanted="$2" row_session _ _ pane _ count=0 state snapshot file matched=0
+  snapshot="$(store_bulk_snapshot)"
+  if [[ -n "$snapshot" ]]; then
+    while IFS=$'\t' read -r row_session _ _ pane _; do
+      [[ "$row_session" == "$session" ]] || continue; matched=1
+      state="$(store_effective "$(pane_file "$session" "$pane")")"; [[ "$state" == "$wanted" ]] && ((count++))
+    done <<<"$snapshot"
   fi
-  file="$(status_file "$session")"
-  [[ -f "$file" && "$(store_effective "$file")" == "$wanted" ]] && ((count++))
-  for file in "$PANE_DIR/${safe_session}_"*; do
-    [[ -f "$file" ]] || continue
-    pane="${file##*/${safe_session}_}"
-    if ((tmux_available)) && ! is_live_pane "$pane" "$live_panes"; then
-      rm -f "$file"
-      continue
-    fi
-    state="$(store_effective "$file")"
-    [[ "$state" == "$wanted" ]] && ((count++))
-  done
+  if (( ! matched )); then
+    for file in "$PANE_DIR/$(sanitize_session "$session")_"*; do
+      [[ -f "$file" ]] && [[ "$(store_effective "$file")" == "$wanted" ]] && ((count++))
+    done
+  fi
+  [[ "$(store_effective "$(status_file "$session")")" == "$wanted" ]] && ((count++))
   printf '%s' "$count"
 }
 
@@ -204,7 +172,11 @@ set)
 	shift || true
 	session="$(resolve_session "${1:-}")"
 	pane="$(resolve_pane "${2:-}")"
-	store_set "$state" "$session" "$pane" "${3:-unknown}" "${4:-0}"
+	if store_set "$state" "$session" "$pane" "${3:-unknown}" "${4:-0}"; then
+		notify_transition "$(store_normalize "$state")" "$session" "$pane" || true
+	else
+		[[ $? == 2 ]] || exit 1
+	fi
 	;;
 get)
 	session="$(resolve_session "${1:-}")"
@@ -225,9 +197,14 @@ clear)
 		file="$(store_path "$session" "$pane")"
 		store_inspect "$file"
 		;;
+	snapshot)
+		store_bulk_snapshot
+		;;
 	doctor)
-	printf 'config_version\t%s\nstate_dir\t%s\n' "$AGENT_STATUS_CONFIG_VERSION" "$STATUS_DIR"
-	;;
+		printf 'config_version\t%s\nstate_dir\t%s\nsound_enabled\t%s\nsound_backend\t%s\nsound_file\t%s\nsound_status\t%s\n' \
+			"$AGENT_STATUS_CONFIG_VERSION" "$STATUS_DIR" "$AGENT_STATUS_SOUND_ENABLED" \
+			"$AGENT_STATUS_SOUND_BACKEND" "$AGENT_STATUS_SOUND_FILE" "$(notify_sound_status)"
+		;;
 *)
 	usage
 	exit 1
