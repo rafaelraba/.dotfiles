@@ -28,6 +28,16 @@ store_path() {
   [[ -n "$pane" ]] && pane_file "$session" "$pane" || status_file "$session"
 }
 
+# One render-local tmux view. Callers may pass this output through
+# AGENT_STATUS_PANE_SNAPSHOT rather than repeatedly asking tmux for panes.
+store_bulk_snapshot() {
+  if [[ -n "${AGENT_STATUS_PANE_SNAPSHOT:-}" ]]; then
+    printf '%s\n' "$AGENT_STATUS_PANE_SNAPSHOT"
+    return
+  fi
+  tmux list-panes -a -F $'#{session_name}\t#{window_index}\t#{window_name}\t#{pane_id}\t#{pane_current_command}\t#{pane_title}\t#{pane_current_path}' 2>/dev/null || true
+}
+
 store_effective() {
   local file="$1" state updated source event age ttl
   [[ -f "$file" ]] || { printf 'idle'; return; }

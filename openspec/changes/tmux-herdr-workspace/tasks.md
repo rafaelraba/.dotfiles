@@ -35,25 +35,25 @@ Preserve unrelated local changes: `editors/claude/settings.json`, `editors/herdr
 
 ## Phase 2: Bulk Pane Snapshot Foundation
 
-- [ ] 2.1 RED test: two-session render issues exactly one `tmux list-panes -a` call and zero per-session `list-panes` calls.
-- [ ] 2.2 Add `store_bulk_snapshot` API in `scripts/agent-status/store.sh` returning tab-delimited `session\twindow_index\twindow_name\tpane_id\tcommand\ttitle\tpath` rows.
-- [ ] 2.3 Refactor `scripts/agent-status.sh` `aggregate_session_state` and `aggregate_session_count` to consume the bulk snapshot.
-- [ ] 2.4 RED test: cold render ≤500 ms and warm render ≤250 ms over 10 runs.
+- [x] 2.1 RED test: two-session render issues exactly one `tmux list-panes -a` call and zero per-session `list-panes` calls.
+- [x] 2.2 Add `store_bulk_snapshot` API in `scripts/agent-status/store.sh` returning tab-delimited `session\twindow_index\twindow_name\tpane_id\tcommand\ttitle\tpath` rows.
+- [x] 2.3 Refactor `scripts/agent-status.sh` `aggregate_session_state` and `aggregate_session_count` to consume the bulk snapshot.
+- [x] 2.4 RED test: cold render ≤500 ms and warm render ≤250 ms over 10 runs.
 
 ## Phase 3: Minimal Accessible Tabs
 
-- [ ] 3.1 RED test: tab output contains only session name and marker; no counts or state words.
-- [ ] 3.2 Modify `scripts/status-sessions.sh` to render name + marker/color tabs and preserve `NO_COLOR` markers.
-- [ ] 3.3 GREEN test: `NO_COLOR=1` tabs distinguish states via `agent_status_state_symbol`.
+- [x] 3.1 RED test: tab output contains only session name and marker; no counts or state words.
+- [x] 3.2 Modify `scripts/status-sessions.sh` to render name + marker/color tabs and preserve `NO_COLOR` markers.
+- [x] 3.3 GREEN test: `NO_COLOR=1` tabs distinguish states via `agent_status_state_symbol`.
 
 ## Phase 4: Hierarchical Picker
 
-- [ ] 4.1 RED test: picker popup opens at 90% width × 80% height.
-- [ ] 4.2 Modify `scripts/session-picker-wrapper.sh` to capture one bulk pane snapshot and launch the percentage popup.
-- [ ] 4.3 Modify `scripts/session-picker.sh` to render indented session → window → pane rows with process and lifecycle detail.
-- [ ] 4.4 GREEN test: >13 rows are searchable by command without truncation.
+- [x] 4.1 RED test: picker popup opens at 90% width × 80% height.
+- [x] 4.2 Modify `scripts/session-picker-wrapper.sh` to capture one bulk pane snapshot and launch the percentage popup.
+- [x] 4.3 Modify `scripts/session-picker.sh` to render indented session → window → pane rows with process and lifecycle detail.
+- [x] 4.4 GREEN test: >13 rows are searchable by command without truncation.
 
 ## Phase 5: Verification
 
-- [ ] 5.1 Update `test/scripts/agent-status-protocol.sh` with snapshot IPC count, timing, tab, hierarchy, and doctor tests.
-- [ ] 5.2 Run `./test/scripts/agent-status-protocol.sh` and confirm all scenarios pass.
+- [x] 5.1 Update `test/scripts/agent-status-protocol.sh` with snapshot IPC count, timing, tab, hierarchy, and doctor tests.
+- [x] 5.2 Run `./test/scripts/agent-status-protocol.sh` and confirm all scenarios pass.

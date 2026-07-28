@@ -79,11 +79,8 @@ calculate_popup_width() {
 # NO se borra aquí: lo limpia session-picker.sh al terminar.
 SPFILE=$(mktemp /tmp/tmux-sp-XXXXXX)
 
-# Capturar sesiones desde el contexto real del cliente (fuera de cualquier popup)
-tmux list-sessions \
-    -f '#{?#{m:_*,#{session_name}},0,1}' \
-    -F $'#{session_name}\t#{session_windows}\t#{session_attached}\t#{pane_current_path}\t#{window_name}\t#{pane_current_command}\t#{pane_title}' \
-    2>/dev/null > "$SPFILE"
+# Capture exactly one render-local pane snapshot before opening the popup.
+"$(dirname "${BASH_SOURCE[0]}")/agent-status.sh" snapshot > "$SPFILE"
 
 # Si el archivo quedó vacío, algo falló — mostrar error mínimo y salir
 if [[ ! -s "$SPFILE" ]]; then
@@ -92,15 +89,16 @@ if [[ ! -s "$SPFILE" ]]; then
     exit 1
 fi
 
-SESSION_COUNT=$(wc -l < "$SPFILE" | tr -d ' ')
-POPUP_WIDTH="$(calculate_popup_width)"
+SESSION_COUNT=$(cut -f1 "$SPFILE" | sort -u | wc -l | tr -d ' ')
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+printf -v picker_command '%q %q %q; rm -f -- %q' "$ROOT/session-picker.sh" "$CURRENT" "$SPFILE" "$SPFILE"
 
 # Abrir el popup con los datos pre-capturados.
 # session-picker.sh lee de $SPFILE y lo borra al terminar.
 exec tmux display-popup \
     -d "$PANEDIR" \
-    -w "$POPUP_WIDTH" -h 13 -b rounded \
+    -w 90% -h 80% -b rounded \
     -s "bg=#1d2021,fg=#d4be98" \
     -S "fg=#a9b665" \
-    -T "  sessions · $SESSION_COUNT " \
-    -E "~/.dotfiles/scripts/session-picker.sh '$CURRENT' '$SPFILE' ; rm -f '$SPFILE'"
+    -T " workspace · $SESSION_COUNT sessions " \
+    -E "$picker_command"
