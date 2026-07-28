@@ -5,6 +5,7 @@ import { join } from "node:path"
 import type { Hooks, Plugin } from "@opencode-ai/plugin"
 
 const AGENT_STATUS_SCRIPT = join(homedir(), ".dotfiles", "scripts", "agent-status.sh")
+let previousEventID = 0
 
 const AGENT_STATE = {
   BLOCKED: "blocked",
@@ -15,6 +16,11 @@ const AGENT_STATE = {
 } as const
 
 type AgentState = (typeof AGENT_STATE)[keyof typeof AGENT_STATE]
+
+function nextEventID(): number {
+  previousEventID = Math.max(Date.now(), previousEventID + 1)
+  return previousEventID
+}
 
 interface EventPayload {
   sessionID?: string
@@ -33,7 +39,7 @@ function setStatus(state: AgentState): void {
   if (!process.env.TMUX || !existsSync(AGENT_STATUS_SCRIPT)) return
 
   try {
-    execFileSync(AGENT_STATUS_SCRIPT, ["set", state], {
+    execFileSync(AGENT_STATUS_SCRIPT, ["set", state, "", "", "opencode", String(nextEventID())], {
       stdio: "ignore",
       timeout: 1000,
     })

@@ -22,6 +22,8 @@ source "$ROOT/agent-status/store.sh"
 source "$ROOT/agent-status/order.sh"
 agent_status_load_config || exit 0
 
+FZF_MODAL_BIND="load:unbind(j,k,/),ctrl-v:change-prompt(  normal › )+rebind(j,k,/),j:down,k:up,/:change-prompt(  filter › )+unbind(j,k,/)"
+
 # Bulk snapshots have pane identity in field four; retain the legacy picker for
 # older session-list captures.
 IFS=$'\t' read -r _ _ _ snapshot_pane _ < "${sessions_file:-/dev/null}" || true
@@ -48,7 +50,7 @@ if [[ "$snapshot_pane" == %* ]]; then
 			printf 'p%s%s\t  │  \033[38;2;%sm●\033[0m %s%s\n' "$sep" "$pane" "$(picker_dot_color "$state")" "$command" "${path:+ · $path}"
 		done < <(agent_status_order_session_rows < "$sessions_file")
 	}
-	selected="$({ picker_rows || true; } | fzf --ansi --layout=reverse --no-border --delimiter=$'\t' --with-nth=2.. --prompt=' search panes › ' --header='Enter switch · ↑/↓ move · Esc close' --pointer='❯ ' --cycle --no-info --no-sort)" || exit 0
+	selected="$({ picker_rows || true; } | fzf --ansi --layout=reverse --no-border --delimiter=$'\t' --with-nth=2.. --prompt='  filter › ' --header='Enter switch · ↑/↓ move · Ctrl-v j/k navigate · / search · Esc close' --pointer='❯ ' --cycle --bind="$FZF_MODAL_BIND" --no-info --no-sort)" || exit 0
 	target="${selected%%$'\t'*}"
 	type="${target%%$'\037'*}"; payload="${target#*$'\037'}"
 	case "$type" in
@@ -266,6 +268,8 @@ selected="$({ session_rows || true; } |
 		--ellipsis='…' \
 		--cycle \
 		--bind="start:pos($initial_selection)" \
+		--bind="$FZF_MODAL_BIND" \
+		--header='Enter switch · ↑/↓ move · Ctrl-v j/k navigate · / search · Esc close' \
 		--scroll-off=1 \
 		--no-info \
 		--tiebreak=index \

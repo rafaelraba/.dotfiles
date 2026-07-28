@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-# Orders newline-delimited session names using configured names first and a
-# locale-independent lexical fallback for all other sessions.
+# Orders newline-delimited session names using configured names first while
+# preserving the source order of all other sessions.
 agent_status_order_sessions() {
   local input=() ordered=() session configured
 
@@ -15,16 +15,12 @@ agent_status_order_sessions() {
     done
   done
 
-  while IFS= read -r session; do
-    [[ -n "$session" ]] && ordered+=("$session")
-  done < <(
-    for session in "${input[@]}"; do
-      for configured in "${AGENT_STATUS_SESSION_ORDER[@]}"; do
-        [[ "$session" == "$configured" ]] && continue 2
-      done
-      printf '%s\n' "$session"
-    done | LC_ALL=C sort
-  )
+  for session in "${input[@]}"; do
+    for configured in "${AGENT_STATUS_SESSION_ORDER[@]}"; do
+      [[ "$session" == "$configured" ]] && continue 2
+    done
+    ordered+=("$session")
+  done
 
   printf '%s\n' "${ordered[@]}"
 }
@@ -49,7 +45,7 @@ agent_status_order_session_rows() {
       [[ "$name" == "$configured" ]] && continue 2
     done
     printf '%s\n' "$row"
-  done | LC_ALL=C sort -t $'\t' -k1,1
+  done
 }
 
 agent_status_state_symbol() {
