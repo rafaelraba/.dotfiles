@@ -87,7 +87,7 @@ store_set() {
   [[ -f "$path" ]] && IFS=$'\t' read -r _ _ _ _ old_event <"$path" || true
   if [[ "$old_event" =~ ^[0-9]+$ ]] && ((event < old_event)); then
     rmdir "$STATUS_DIR/.lock"
-    return 0
+    return 2
   fi
   now="$(store_now)"
   tmp="$(mktemp "${path}.tmp.XXXXXX")"

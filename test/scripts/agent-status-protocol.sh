@@ -117,6 +117,56 @@ mixed_tab="$(render_tab)"
 check_contains 'rafaba · 1 done · 1 running' "$mixed_tab" 'mixed record counts use ordered separators'
 check_contains '[● rafaba · 1 done · 1 running]' "$(NO_COLOR=1 render_tab)" 'no-color active tab remains readable'
 
+# Sound is opt-in, synchronous for deterministic tests, and deduplicated by
+# attention state plus session/pane identity.
+SOUND_BIN="$TMP/sound-bin"
+SOUND_LOG="$TMP/sound.log"
+SOUND_FILE="$TMP/sound file.aiff"
+mkdir -p "$SOUND_BIN"
+printf 'sound' >"$SOUND_FILE"
+cat >"$SOUND_BIN/afplay" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$#:$1" >>"$SOUND_LOG"
+EOF
+cp "$SOUND_BIN/afplay" "$SOUND_BIN/paplay"
+chmod +x "$SOUND_BIN/afplay" "$SOUND_BIN/paplay"
+cat >"$TMP/sound.conf" <<EOF
+AGENT_STATUS_CONFIG_VERSION=1
+AGENT_STATUS_SOUND_ENABLED=1
+AGENT_STATUS_SOUND_STATES=(permission error)
+AGENT_STATUS_SOUND_COOLDOWN=30
+AGENT_STATUS_SOUND_BACKEND=afplay
+AGENT_STATUS_SOUND_FILE="$SOUND_FILE"
+EOF
+sound_set() {
+  AGENT_STATUS_CONFIG="$TMP/sound.conf" AGENT_STATUS_NOW="$1" SOUND_LOG="$SOUND_LOG" PATH="$SOUND_BIN:$PATH" "$SCRIPT" set "$2" sound %9 adapter "$3"
+}
+sound_set 100 permission 1
+sound_set 110 permission 2
+sound_set 140 permission 3
+check 2 "$(wc -l <"$SOUND_LOG" | tr -d ' ')" 'sound cooldown and expiry'
+check "1:$SOUND_FILE" "$(sed -n '1p' "$SOUND_LOG")" 'sound path remains one argv'
+sound_set 141 error 4
+check 3 "$(wc -l <"$SOUND_LOG" | tr -d ' ')" 'distinct attention event has separate ledger identity'
+sed 's/AGENT_STATUS_SOUND_BACKEND=afplay/AGENT_STATUS_SOUND_BACKEND=paplay/' "$TMP/sound.conf" >"$TMP/paplay.conf"
+AGENT_STATUS_CONFIG="$TMP/paplay.conf" AGENT_STATUS_NOW=142 SOUND_LOG="$SOUND_LOG" PATH="$SOUND_BIN:$PATH" "$SCRIPT" set error sound %10 adapter 5
+check 4 "$(wc -l <"$SOUND_LOG" | tr -d ' ')" 'allowlisted paplay backend'
+
+# An allowlist rejection or unavailable backend is quiet unless debug is opted in;
+# both cases leave the visual protocol state intact.
+sed 's/AGENT_STATUS_SOUND_BACKEND=afplay/AGENT_STATUS_SOUND_BACKEND=not-a-player/' "$TMP/sound.conf" >"$TMP/unsafe.conf"
+unsafe_output="$(AGENT_STATUS_CONFIG="$TMP/unsafe.conf" AGENT_STATUS_DEBUG=1 "$SCRIPT" set permission visual %10 adapter 1 2>&1)"
+check permission "$(AGENT_STATUS_CONFIG="$TMP/unsafe.conf" "$SCRIPT" get visual)" 'unsafe backend preserves visual state'
+check_contains 'unsupported backend: not-a-player' "$unsafe_output" 'allowlist diagnostic'
+sed 's/AGENT_STATUS_SOUND_BACKEND=afplay/AGENT_STATUS_SOUND_BACKEND=paplay/' "$TMP/sound.conf" >"$TMP/missing.conf"
+missing_output="$(AGENT_STATUS_CONFIG="$TMP/missing.conf" AGENT_STATUS_DEBUG=1 PATH="/usr/bin:/bin" "$SCRIPT" set permission missing %11 adapter 1 2>&1)"
+check permission "$(AGENT_STATUS_CONFIG="$TMP/missing.conf" "$SCRIPT" get missing)" 'missing backend preserves visual state'
+check_contains 'backend unavailable: paplay' "$missing_output" 'missing backend diagnostic'
+sed 's|AGENT_STATUS_SOUND_FILE=.*|AGENT_STATUS_SOUND_FILE="/missing sound.aiff"|' "$TMP/sound.conf" >"$TMP/missing-sound.conf"
+missing_sound_output="$(AGENT_STATUS_CONFIG="$TMP/missing-sound.conf" AGENT_STATUS_DEBUG=1 "$SCRIPT" set permission silent %12 adapter 1 2>&1)"
+check permission "$(AGENT_STATUS_CONFIG="$TMP/missing-sound.conf" "$SCRIPT" get silent)" 'missing sound preserves visual state'
+check_contains 'sound file unavailable: /missing sound.aiff' "$missing_sound_output" 'missing sound diagnostic'
+
 if ((fail)); then
   exit 1
 fi

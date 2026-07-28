@@ -23,6 +23,8 @@ source "$ROOT/agent-status/config.sh"
 source "$ROOT/agent-status/store.sh"
 # shellcheck source=agent-status/order.sh
 source "$ROOT/agent-status/order.sh"
+# shellcheck source=agent-status/notify.sh
+source "$ROOT/agent-status/notify.sh"
 agent_status_load_config || { printf 'Invalid agent-status configuration.\n' >&2; exit 1; }
 
 usage() {
@@ -204,7 +206,11 @@ set)
 	shift || true
 	session="$(resolve_session "${1:-}")"
 	pane="$(resolve_pane "${2:-}")"
-	store_set "$state" "$session" "$pane" "${3:-unknown}" "${4:-0}"
+	if store_set "$state" "$session" "$pane" "${3:-unknown}" "${4:-0}"; then
+		notify_transition "$(store_normalize "$state")" "$session" "$pane" || true
+	else
+		[[ $? == 2 ]] || exit 1
+	fi
 	;;
 get)
 	session="$(resolve_session "${1:-}")"

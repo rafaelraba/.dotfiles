@@ -63,9 +63,9 @@ Chain strategy: stacked-to-main.
 
 ## Phase 5: Notifications and Recovery
 
-- [ ] 5.1 Create `scripts/agent-status/notify.sh` with dedup ledger, backend allowlist (`afplay`/`paplay`), and cooldown.
-- [ ] 5.2 RED test: repeated attention transitions within cooldown produce only one sound.
-- [ ] 5.3 RED test: missing sound command keeps visual status and logs a diagnostic.
+- [x] 5.1 Create `scripts/agent-status/notify.sh` with dedup ledger, backend allowlist (`afplay`/`paplay`), and cooldown.
+- [x] 5.2 RED test: repeated attention transitions within cooldown produce only one sound.
+- [x] 5.3 RED test: missing sound command keeps visual status and logs a diagnostic.
 - [ ] 5.4 Modify `restoration_scripts/01-verify-install.sh` to verify links, config, permissions, and `doctor` output.
 
 ## Phase 6: Final Integration and Verification
