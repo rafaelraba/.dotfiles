@@ -43,11 +43,11 @@ Chain strategy: stacked-to-main.
 
 ## Phase 3: Tmux Presentation
 
-- [ ] 3.1 Create `scripts/agent-status/order.sh` with configured session order and lexical fallback.
-- [ ] 3.2 RED test: identical config yields deterministic tab order across restarts.
-- [ ] 3.3 Modify `scripts/status-sessions.sh` to consume aggregate and render urgency, counts, and no-color labels.
-- [ ] 3.4 Modify `scripts/session-picker.sh` to consume the same aggregate and preserve deterministic order.
-- [ ] 3.5 Add distinguishable symbols and preserve contrast for color-disabled terminals.
+- [x] 3.1 Create `scripts/agent-status/order.sh` with configured session order and lexical fallback.
+- [x] 3.2 RED test: identical config yields deterministic tab order across restarts.
+- [x] 3.3 Modify `scripts/status-sessions.sh` to consume aggregate and render urgency, counts, and no-color labels.
+- [x] 3.4 Modify `scripts/session-picker.sh` to consume the same aggregate and preserve deterministic order.
+- [x] 3.5 Add distinguishable symbols and preserve contrast for color-disabled terminals.
 
 ## Phase 4: Adapters and Wiring
 
