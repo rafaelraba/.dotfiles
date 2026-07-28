@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+
+agent_status_load_config() {
+  local root config
+  root="${DOTFILES_PATH:-$HOME/.dotfiles}"
+  config="${AGENT_STATUS_CONFIG:-$root/editors/tmux/agent-status.conf}"
+  AGENT_STATUS_CONFIG_VERSION=1
+  AGENT_STATUS_ACTIVE_TTL=300
+  AGENT_STATUS_TERMINAL_TTL=3600
+  AGENT_STATUS_SOUND_ENABLED=0
+  AGENT_STATUS_SOUND_COOLDOWN=30
+  AGENT_STATUS_SESSION_ORDER=()
+  AGENT_STATUS_SOUND_STATES=()
+  [[ -r "$config" ]] && source "$config"
+  [[ "$AGENT_STATUS_CONFIG_VERSION" == 1 ]] || return 1
+  [[ "$AGENT_STATUS_ACTIVE_TTL" =~ ^[0-9]+$ && "$AGENT_STATUS_TERMINAL_TTL" =~ ^[0-9]+$ ]] || return 1
+  [[ "$AGENT_STATUS_SOUND_ENABLED" =~ ^[01]$ && "$AGENT_STATUS_SOUND_COOLDOWN" =~ ^[0-9]+$ ]] || return 1
+  STATUS_DIR="${AGENT_STATUS_STATE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/agent-status}"
+  [[ "$STATUS_DIR" = /* ]] || return 1
+  SESSION_DIR="$STATUS_DIR/sessions"
+  PANE_DIR="$STATUS_DIR/panes"
+  export AGENT_STATUS_ACTIVE_TTL AGENT_STATUS_TERMINAL_TTL AGENT_STATUS_SOUND_ENABLED AGENT_STATUS_SOUND_COOLDOWN STATUS_DIR SESSION_DIR PANE_DIR
+}
