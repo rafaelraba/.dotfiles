@@ -83,39 +83,74 @@ check $'state=blocked\tblocked=1\tdone=1' "$("$SCRIPT" summary mixed)" 'aggregat
 check '? permission' "$(AGENT_STATUS_CONFIG="$TMP/order.conf" bash -c 'source "$1"; printf "%s %s" "$(agent_status_state_symbol permission)" "$(agent_status_state_label permission)"' _ "$ORDER")" 'permission no-color marker'
 check '… input' "$(AGENT_STATUS_CONFIG="$TMP/order.conf" bash -c 'source "$1"; printf "%s %s" "$(agent_status_state_symbol waiting_for_input)" "$(agent_status_state_label waiting_for_input)"' _ "$ORDER")" 'input no-color marker'
 
-# The active tab describes tracked records after the session name without
-# repeating its dominant state or showing a singular count.
+# Rendering uses one bulk pane snapshot and tabs deliberately carry no detail.
 FAKE_BIN="$TMP/bin"
+TMUX_LOG="$TMP/tmux.log"
 mkdir -p "$FAKE_BIN"
 cat >"$FAKE_BIN/tmux" <<'EOF'
 #!/usr/bin/env bash
+printf '%s\n' "$*" >>"$TMUX_LOG"
 case "$1" in
-  list-sessions) printf '1 rafaba\n' ;;
-  list-panes) printf '%%7\n%%8\n%%13\n' ;;
+  list-sessions) printf '1 rafaba\n2 other\n' ;;
+  list-panes) printf 'rafaba\t0\tmain\t%%7\tbash\tmain\t/tmp\nrafaba\t1\tcode\t%%8\tclaude\tcode\t/tmp\nother\t0\twork\t%%13\tvim\twork\t/tmp\n' ;;
 esac
 EOF
 chmod +x "$FAKE_BIN/tmux"
 render_tab() {
-  PATH="$FAKE_BIN:$PATH" "$ROOT/scripts/status-sessions.sh" rafaba
+  TMUX_LOG="$TMUX_LOG" PATH="$FAKE_BIN:$PATH" "$ROOT/scripts/status-sessions.sh" "$1"
 }
 
 "$SCRIPT" clear rafaba
 "$SCRIPT" set done rafaba %7 adapter 1
-single_tab="$(render_tab)"
-check_contains 'rafaba · done' "$single_tab" 'singular tracked record suppresses count'
-[[ "$single_tab" != *'done:rafaba'* && "$single_tab" != *'+ done'* ]] || fail=1
+single_tab="$(render_tab rafaba)"
+check_contains 'rafaba' "$single_tab" 'tab includes session name'
+[[ "$single_tab" != *'done'* && "$single_tab" != *'running'* && "$single_tab" != *'1 '* ]] || fail=1
+check 1 "$(grep -c '^list-panes -a' "$TMUX_LOG" || true)" 'one bulk pane snapshot per status render'
+other_tab="$(render_tab other)"
+[[ "$single_tab" == *'other'*'rafaba'* && "$other_tab" == *'other'*'rafaba'* ]] || fail=1
+check_contains '#[fg=#a6da95]●#[fg=#ffffff] rafaba' "$single_tab" 'active point resets to white label'
+check_contains '#[fg=#3b4261]●#[fg=#ffffff] other' "$single_tab" 'inactive point resets to white label'
+[[ "$single_tab" != *'#[fg=#a6da95]● rafaba'* && "$single_tab" != *'#[fg=#3b4261]● other'* ]] || fail=1
+check_contains '[✓ rafaba]' "$(NO_COLOR=1 render_tab rafaba)" 'no-color tab keeps distinct marker'
 
-"$SCRIPT" clear rafaba
-"$SCRIPT" set done rafaba %7 adapter 1
-"$SCRIPT" set done rafaba %8 adapter 1
-check_contains 'rafaba · 2 done' "$(render_tab)" 'plural tracked records render count'
+# Timing instrumentation records every render for deterministic budget coverage.
+TIMING_FILE="$TMP/render-ms"
+for _ in $(seq 1 10); do AGENT_STATUS_TIMING_FILE="$TIMING_FILE" render_tab rafaba >/dev/null; done
+timing_count=0; [[ -f "$TIMING_FILE" ]] && timing_count="$(wc -l <"$TIMING_FILE" | tr -d ' ')"
+check 10 "$timing_count" 'ten render timing samples'
 
-"$SCRIPT" clear rafaba
-"$SCRIPT" set done rafaba %7 adapter 1
-"$SCRIPT" set running rafaba %8 adapter 1
-mixed_tab="$(render_tab)"
-check_contains 'rafaba · 1 done · 1 running' "$mixed_tab" 'mixed record counts use ordered separators'
-check_contains '[● rafaba · 1 done · 1 running]' "$(NO_COLOR=1 render_tab)" 'no-color active tab remains readable'
+# Picker consumes one bulk snapshot, keeps hierarchy searchable, and switches panes.
+PICKER_BIN="$TMP/picker-bin" PICKER_LOG="$TMP/picker.log" PICKER_ROWS="$TMP/picker.rows" snapshot="$TMP/panes.tsv"
+mkdir -p "$PICKER_BIN"
+cat >"$PICKER_BIN/fzf" <<'EOF'
+#!/usr/bin/env bash
+input="$(cat)"; printf '%s\n' "$input" >>"$PICKER_LOG"; printf '%s\n' "$input" >"$PICKER_ROWS"; printf '%s\n' "$input" | grep "^${PICKER_SELECTION}" || true
+EOF
+cat >"$PICKER_BIN/tmux" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$PICKER_LOG"
+case "$1" in list-panes) printf 'alpha\t0\tmain\t%%8\tcmd;$(touch nope)\ttitle\t/tmp/a b\n' ;; display-popup) : ;; esac
+EOF
+chmod +x "$PICKER_BIN/fzf" "$PICKER_BIN/tmux"
+{ for n in $(seq 1 14); do printf 'alpha\t%s\twindow %s\t%%%s\tcmd-%s;$(touch nope)\ttitle\t/tmp/a b\n' "$n" "$n" "$n" "$n"; done; } >"$snapshot"
+PICKER_LOG="$PICKER_LOG" PICKER_ROWS="$PICKER_ROWS" PICKER_SELECTION=$'p\037%8' PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker.sh" alpha "$snapshot" >/dev/null 2>&1 || true
+check_contains '▾ alpha' "$(cat "$PICKER_LOG")" 'picker hierarchy session row'
+check_contains 'cmd-14;$(touch nope)' "$(cat "$PICKER_LOG")" 'picker keeps special command inert'
+check_contains 'switch-client -t %8' "$(cat "$PICKER_LOG")" 'picker switches selected pane'
+visible_rows="$(cut -f2- "$PICKER_ROWS")"
+[[ "$visible_rows" != *'%8'* && "$visible_rows" != *'idle'* ]] || fail=1
+check_contains $'\033[38;2;146;131;116m●\033[0m cmd-14' "$visible_rows" 'picker state dot is color-scoped'
+check 1 "$(test -e nope; printf '%s' "$?")" 'picker does not execute command data'
+: >"$PICKER_LOG"
+PICKER_LOG="$PICKER_LOG" PICKER_ROWS="$PICKER_ROWS" PICKER_SELECTION=$'s\037alpha' PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker.sh" alpha "$snapshot" >/dev/null 2>&1 || true
+check_contains 'switch-client -t =alpha' "$(cat "$PICKER_LOG")" 'picker switches selected session'
+: >"$PICKER_LOG"
+PICKER_LOG="$PICKER_LOG" PICKER_ROWS="$PICKER_ROWS" PICKER_SELECTION=$'w\037alpha\0378' PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker.sh" alpha "$snapshot" >/dev/null 2>&1 || true
+check_contains 'switch-client -t =alpha' "$(cat "$PICKER_LOG")" 'picker switches selected window session'
+check_contains 'select-window -t :8' "$(cat "$PICKER_LOG")" 'picker switches selected window'
+PICKER_LOG="$PICKER_LOG" PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker-wrapper.sh" alpha /tmp >/dev/null || true
+check_contains 'display-popup -d /tmp -w 90% -h 80%' "$(cat "$PICKER_LOG")" 'picker popup percentage sizing'
+check 1 "$(grep -c '^list-panes -a' "$PICKER_LOG" || true)" 'picker opens with one bulk snapshot'
 
 # Sound is opt-in, synchronous for deterministic tests, and deduplicated by
 # attention state plus session/pane identity.
@@ -182,7 +217,7 @@ AGENT_STATUS_SOUND_ENABLED=0
 EOF
 macos_default_output="$(AGENT_STATUS_CONFIG="$TMP/macos-default.conf" AGENT_STATUS_PLATFORM=Darwin AGENT_STATUS_NOW=200 SOUND_LOG="$SOUND_LOG" PATH="$FAKE_BIN:$SOUND_BIN:$PATH" "$SCRIPT" set permission macos %13 adapter 1 2>&1)"
 check "1:/System/Library/Sounds/Glass.aiff" "$(sed -n '5p' "$SOUND_LOG")" 'macOS default sound remains one argv'
-check permission "$(AGENT_STATUS_CONFIG="$TMP/macos-default.conf" AGENT_STATUS_PLATFORM=Darwin AGENT_STATUS_NOW=200 PATH="$FAKE_BIN:$PATH" "$SCRIPT" get macos)" 'macOS default preserves visual state'
+check permission "$(AGENT_STATUS_CONFIG="$TMP/macos-default.conf" AGENT_STATUS_PLATFORM=Darwin AGENT_STATUS_NOW=200 PATH="$PATH" "$SCRIPT" get macos)" 'macOS default preserves visual state'
 
 # Doctor reports disabled, unsafe, missing backend/file, and ready setups
 # without invoking a configured backend.

@@ -2,128 +2,71 @@
 
 ## Purpose
 
-Define a vendor-neutral, reproducible tmux workspace that exposes trustworthy agent lifecycle state while remaining safe when events are incomplete, stale, unsupported, or unavailable.
+Provide a fast, vendor-neutral tmux workspace with trustworthy lifecycle visibility, detailed inspection, safe optional sound, and reproducible restoration.
 
-## ADDED Requirements
+## Requirements
 
-### Requirement: Canonical lifecycle contract
+### Requirement: Bounded and responsive rendering
 
-The protocol MUST accept `running`, `permission`, `waiting_for_input`, `blocked`, `done`, `idle`, and `error`, with producer identity, session/pane identity, event time, and freshness metadata. Adapters MUST normalize invalid or unsupported states to `blocked`.
+The presenter MUST obtain one bounded bulk tmux snapshot per render and MUST NOT issue per-session `list-panes` calls. In shell/tmux acceptance tests, two sessions MUST render in ≤250 ms with warm commands and ≤500 ms cold; key-event handling MUST remain responsive while rendering.
 
-#### Scenario: Valid event
+#### Scenario: Two-session render
+- GIVEN two sessions with panes and lifecycle records
+- WHEN the status renderer refreshes
+- THEN exactly one bulk pane snapshot is used and elapsed time is ≤500 ms cold (≤250 ms warm).
 
-- **GIVEN** a registered adapter emits a supported state with identifiers and timestamp
-- **WHEN** the event is consumed
-- **THEN** the canonical record is accepted and rendered for its pane.
+#### Scenario: Queued key event
+- GIVEN a render is in progress and a tmux key event arrives
+- WHEN the event is processed
+- THEN it is not delayed by repeated synchronous per-session status commands.
 
-#### Scenario: Unsupported distinction
+### Requirement: Minimal accessible tabs
 
-- **GIVEN** an adapter cannot distinguish permission from input
-- **WHEN** it reports the condition
-- **THEN** the record is `blocked`, never falsely labeled as permission or input.
+Tabs MUST show only the session name and a glanceable state color plus marker. They MUST NOT show counts or state words. Picker/inspect views MUST retain detailed state, and no-color output MUST distinguish states with markers or symbols.
 
-### Requirement: Explicit transitions and freshness
+#### Scenario: Mixed-state tab
+- GIVEN a session contains running and permission panes
+- WHEN its tab is rendered
+- THEN only its name and the aggregate permission marker/color appear.
 
-State changes MUST be monotonic per event sequence, terminal states MUST clear active attention, and records older than configured freshness MUST recover to `idle` or `blocked` without claiming active work.
+#### Scenario: No color
+- GIVEN terminal color is unavailable
+- WHEN tabs render
+- THEN state remains distinguishable by a non-color marker.
 
-#### Scenario: Completion
+### Requirement: Responsive hierarchical picker
 
-- **GIVEN** a pane is `running`
-- **WHEN** a valid `done` event arrives
-- **THEN** attention stops and the pane remains inspectable as done.
+The picker MUST open as a percentage-based large popup, support search, and list hierarchical session → window → pane rows. Pane rows MUST expose current command/process details, lifecycle colors/markers, and footer key hints. Structure MAY be inspired by Herdr but MUST NOT copy its UI wholesale.
 
-#### Scenario: Stale producer
+#### Scenario: Search and inspect
+- GIVEN sessions contain multiple windows and panes
+- WHEN the user opens the picker and searches for a command
+- THEN matching hierarchical rows appear with current process and lifecycle detail.
 
-- **GIVEN** no update arrives before the freshness limit
-- **WHEN** the presenter refreshes
-- **THEN** the pane is marked safely inactive and visibly stale/error-qualified.
+#### Scenario: Large workspace
+- GIVEN more than 13 sessions or panes exist
+- WHEN the picker opens
+- THEN the popup supports scrolling/search without truncating the workspace to 13 rows.
 
-### Requirement: Permission and waiting semantics
+### Requirement: Safe audible notification
 
-The presenter MUST distinguish permission from waiting input in icon, label, and attention treatment; `error > permission > waiting_for_input > blocked > done > running > idle` MUST define urgency.
+Sound MUST remain disabled by default, provide an explicit macOS-safe audible default when enabled/configured, and MUST NOT execute arbitrary shell input. Doctor diagnostics MUST report sound configuration and availability. Visual state MUST survive all sound failures.
 
-#### Scenario: Concurrent attention
+#### Scenario: Enabled default
+- GIVEN sound is enabled on macOS without a custom command
+- WHEN an attention transition occurs
+- THEN the configured safe audible default is attempted and no arbitrary shell is evaluated.
 
-- **GIVEN** panes require permission and input simultaneously
-- **WHEN** session urgency is computed
-- **THEN** permission leads while both meanings remain visible.
+#### Scenario: Sound failure
+- GIVEN sound is enabled but unavailable
+- WHEN an attention transition occurs
+- THEN lifecycle visuals remain correct and doctor/diagnostics identify the failure.
 
-### Requirement: Pane/session aggregation
+### Requirement: Trustworthy lifecycle and recovery
 
-Pane state MUST be independently addressable; session state MUST aggregate the highest urgency and retain counts for each non-idle state.
+The protocol MUST support `running`, `permission`, `waiting_for_input`, `blocked`, `done`, `idle`, and `error`; invalid or unsupported states MUST degrade to `blocked`. Stale records MUST recover safely, and urgency MUST be `error > permission > waiting_for_input > blocked > done > running > idle`.
 
-#### Scenario: Mixed session
-
-- **GIVEN** one session has running, done, and blocked panes
-- **WHEN** its tab is rendered
-- **THEN** the tab shows blocked urgency and deterministic counts without losing pane detail.
-
-### Requirement: Adapter parity
-
-OpenCode, Codex, Pi, and Claude Code adapters MUST implement the contract independently, emit supported native states, and degrade gracefully when hooks or APIs are absent.
-
-#### Scenario: Missing integration
-
-- **GIVEN** an agent exposes no usable lifecycle event
-- **WHEN** its adapter initializes
-- **THEN** the workspace remains usable and reports unavailable/blocked rather than failing tmux.
-
-### Requirement: Stable tab ordering
-
-Tabs MUST sort by configured order, then stable session identity using lexical fallback; ordering MUST NOT depend on event arrival, urgency, or restart timing.
-
-#### Scenario: Restart determinism
-
-- **GIVEN** identical sessions and configuration across two starts
-- **WHEN** tabs are rendered
-- **THEN** both orders are identical, including ties.
-
-### Requirement: Accessible status rendering
-
-Status output MUST expose text labels in addition to color, use distinguishable symbols, preserve contrast, and provide a no-color readable mode.
-
-#### Scenario: Color unavailable
-
-- **GIVEN** a terminal disables color
-- **WHEN** status is rendered
-- **THEN** state names/symbols still communicate urgency and meaning.
-
-### Requirement: Optional sound policy
-
-Sounds MUST be disabled by default, explicitly configurable, and deduplicated by state transition and pane/session identity within a configured cooldown.
-
-#### Scenario: Repeated event
-
-- **GIVEN** sound is enabled and the same attention state is refreshed repeatedly
-- **WHEN** events arrive within cooldown
-- **THEN** only the first transition produces sound.
-
-### Requirement: Recovery and restoration
-
-Configuration and persisted state MUST be versioned; restore MUST migrate supported prior versions, preserve existing sessions, verify adapters/presenter wiring, and permit rollback to legacy rendering.
-
-#### Scenario: Older install
-
-- **GIVEN** a supported older configuration
-- **WHEN** restoration runs
-- **THEN** it migrates, validates, and reports each component without disrupting current tmux sessions.
-
-### Requirement: Extension and security contract
-
-New adapters MUST declare identity, capabilities, event schema/version, and failure behavior. Inputs MUST be treated as untrusted data, writes MUST be scoped to configured state locations, and malformed events MUST NOT execute commands or crash the presenter.
-
-#### Scenario: Malformed event
-
-- **GIVEN** an event contains invalid fields or shell-sensitive text
-- **WHEN** parsed
-- **THEN** it is rejected or safely normalized, logged without secrets, and the workspace continues operating.
-
-### Requirement: Graceful degradation
-
-If tmux, an adapter, sound command, or state source is unavailable, unaffected workspace functions MUST continue and the user MUST receive actionable diagnostics.
-
-#### Scenario: Sound unavailable
-
-- **GIVEN** notification is enabled but the platform command is missing
-- **WHEN** an attention transition occurs
-- **THEN** visual status remains correct and diagnostics identify the optional failure.
+#### Scenario: Unsupported or stale state
+- GIVEN an adapter cannot distinguish input or a record exceeds freshness
+- WHEN the presenter refreshes
+- THEN it shows blocked or safely inactive/stale state without false active attention.
