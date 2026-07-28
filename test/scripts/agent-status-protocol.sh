@@ -91,7 +91,7 @@ cat >"$FAKE_BIN/tmux" <<'EOF'
 #!/usr/bin/env bash
 case "$1" in
   list-sessions) printf '1 rafaba\n' ;;
-  list-panes) printf '%%7\n%%8\n' ;;
+  list-panes) printf '%%7\n%%8\n%%13\n' ;;
 esac
 EOF
 chmod +x "$FAKE_BIN/tmux"
@@ -166,6 +166,35 @@ sed 's|AGENT_STATUS_SOUND_FILE=.*|AGENT_STATUS_SOUND_FILE="/missing sound.aiff"|
 missing_sound_output="$(AGENT_STATUS_CONFIG="$TMP/missing-sound.conf" AGENT_STATUS_DEBUG=1 "$SCRIPT" set permission silent %12 adapter 1 2>&1)"
 check permission "$(AGENT_STATUS_CONFIG="$TMP/missing-sound.conf" "$SCRIPT" get silent)" 'missing sound preserves visual state'
 check_contains 'sound file unavailable: /missing sound.aiff' "$missing_sound_output" 'missing sound diagnostic'
+
+# On macOS, an enabled configuration without a custom file resolves to the
+# readable system sound. The configured path remains a single argv value.
+cat >"$TMP/macos-default.conf" <<'EOF'
+AGENT_STATUS_CONFIG_VERSION=1
+AGENT_STATUS_SOUND_ENABLED=1
+AGENT_STATUS_SOUND_STATES=(permission)
+AGENT_STATUS_SOUND_BACKEND=afplay
+AGENT_STATUS_SOUND_FILE=""
+EOF
+cat >"$TMP/disabled.conf" <<'EOF'
+AGENT_STATUS_CONFIG_VERSION=1
+AGENT_STATUS_SOUND_ENABLED=0
+EOF
+macos_default_output="$(AGENT_STATUS_CONFIG="$TMP/macos-default.conf" AGENT_STATUS_PLATFORM=Darwin AGENT_STATUS_NOW=200 SOUND_LOG="$SOUND_LOG" PATH="$FAKE_BIN:$SOUND_BIN:$PATH" "$SCRIPT" set permission macos %13 adapter 1 2>&1)"
+check "1:/System/Library/Sounds/Glass.aiff" "$(sed -n '5p' "$SOUND_LOG")" 'macOS default sound remains one argv'
+check permission "$(AGENT_STATUS_CONFIG="$TMP/macos-default.conf" AGENT_STATUS_PLATFORM=Darwin AGENT_STATUS_NOW=200 PATH="$FAKE_BIN:$PATH" "$SCRIPT" get macos)" 'macOS default preserves visual state'
+
+# Doctor reports disabled, unsafe, missing backend/file, and ready setups
+# without invoking a configured backend.
+check_contains $'sound_enabled\t0\nsound_backend\tafplay\nsound_file\t\nsound_status\tdisabled' "$(AGENT_STATUS_CONFIG="$TMP/disabled.conf" "$SCRIPT" doctor)" 'doctor disabled sound'
+check_contains $'sound_status\tunsupported_backend' "$(AGENT_STATUS_CONFIG="$TMP/unsafe.conf" "$SCRIPT" doctor)" 'doctor unsafe backend'
+check_contains $'sound_status\tbackend_missing' "$(AGENT_STATUS_CONFIG="$TMP/missing.conf" PATH="/usr/bin:/bin" "$SCRIPT" doctor)" 'doctor missing backend'
+check_contains $'sound_status\tfile_missing' "$(AGENT_STATUS_CONFIG="$TMP/missing-sound.conf" PATH="$SOUND_BIN:$PATH" "$SCRIPT" doctor)" 'doctor missing file'
+check_contains $'sound_status\tready' "$(AGENT_STATUS_CONFIG="$TMP/sound.conf" PATH="$SOUND_BIN:$PATH" "$SCRIPT" doctor)" 'doctor ready setup'
+
+# A macOS-only default must not turn a disabled Linux configuration into an
+# unavailable sound failure.
+check_contains $'sound_file\t\nsound_status\tdisabled' "$(AGENT_STATUS_CONFIG="$TMP/disabled.conf" AGENT_STATUS_PLATFORM=Linux "$SCRIPT" doctor)" 'disabled Linux portability'
 
 if ((fail)); then
   exit 1

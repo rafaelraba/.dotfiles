@@ -232,8 +232,10 @@ clear)
 		store_inspect "$file"
 		;;
 	doctor)
-	printf 'config_version\t%s\nstate_dir\t%s\n' "$AGENT_STATUS_CONFIG_VERSION" "$STATUS_DIR"
-	;;
+		printf 'config_version\t%s\nstate_dir\t%s\nsound_enabled\t%s\nsound_backend\t%s\nsound_file\t%s\nsound_status\t%s\n' \
+			"$AGENT_STATUS_CONFIG_VERSION" "$STATUS_DIR" "$AGENT_STATUS_SOUND_ENABLED" \
+			"$AGENT_STATUS_SOUND_BACKEND" "$AGENT_STATUS_SOUND_FILE" "$(notify_sound_status)"
+		;;
 *)
 	usage
 	exit 1

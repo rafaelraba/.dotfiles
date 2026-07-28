@@ -18,6 +18,15 @@ notify_attention_state() {
   return 1
 }
 
+notify_sound_status() {
+  local backend="$AGENT_STATUS_SOUND_BACKEND" sound="$AGENT_STATUS_SOUND_FILE"
+  [[ "$AGENT_STATUS_SOUND_ENABLED" == 1 ]] || { printf 'disabled'; return; }
+  case "$backend" in afplay|paplay) ;; *) printf 'unsupported_backend'; return ;; esac
+  command -v "$backend" >/dev/null 2>&1 || { printf 'backend_missing'; return; }
+  [[ -r "$sound" ]] || { printf 'file_missing'; return; }
+  printf 'ready'
+}
+
 notify_lock() {
   local lock="$STATUS_DIR/.notify.lock" attempt=0 age
   while ! mkdir "$lock" 2>/dev/null; do
@@ -33,9 +42,13 @@ notify_transition() {
   local sound="$AGENT_STATUS_SOUND_FILE" ledger key now last=0 tmp
   [[ "$AGENT_STATUS_SOUND_ENABLED" == 1 ]] || return 0
   notify_attention_state "$state" || return 0
-  case "$backend" in afplay|paplay) ;; *) notify_debug "unsupported backend: $backend"; return 0 ;; esac
-  command -v "$backend" >/dev/null 2>&1 || { notify_debug "backend unavailable: $backend"; return 0; }
-  [[ -r "$sound" ]] || { notify_debug "sound file unavailable: $sound"; return 0; }
+  case "$(notify_sound_status)" in
+    ready) ;;
+    unsupported_backend) notify_debug "unsupported backend: $backend"; return 0 ;;
+    backend_missing) notify_debug "backend unavailable: $backend"; return 0 ;;
+    file_missing) notify_debug "sound file unavailable: $sound"; return 0 ;;
+    *) return 0 ;;
+  esac
 
   mkdir -p "$STATUS_DIR" || return 0
   notify_lock || { notify_debug 'notification lock unavailable'; return 0; }
