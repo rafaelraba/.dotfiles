@@ -35,7 +35,7 @@ store_bulk_snapshot() {
     printf '%s\n' "$AGENT_STATUS_PANE_SNAPSHOT"
     return
   fi
-  tmux list-panes -a -F $'#{session_name}\t#{window_index}\t#{window_name}\t#{pane_id}\t#{pane_current_command}\t#{pane_title}\t#{pane_current_path}' 2>/dev/null || true
+  tmux list-panes -a -F $'#{session_name}\t#{window_index}\t#{window_name}\t#{pane_id}\t#{pane_current_command}\t#{pane_title}\t#{pane_current_path}\t#{pane_start_command}' 2>/dev/null || true
 }
 
 store_effective() {

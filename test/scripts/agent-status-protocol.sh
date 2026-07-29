@@ -83,6 +83,16 @@ check running "$adapter_state" 'OpenCode event supersedes older record'
 check opencode "$adapter_source" 'OpenCode protocol source'
 check 1001 "$adapter_event" 'OpenCode same-millisecond monotonic event ID'
 
+# Claude preserves its producer identity so presentation can identify the agent
+# even when tmux displays a transient command or title.
+mkdir -p "$HOME/.dotfiles/scripts"
+printf '#!/usr/bin/env bash\nexec %q "$@"\n' "$SCRIPT" >"$HOME/.dotfiles/scripts/agent-status.sh"
+chmod +x "$HOME/.dotfiles/scripts/agent-status.sh"
+printf '{"hook_event_name":"UserPromptSubmit"}\n' | TMUX=/tmp/tmux-test TMUX_PANE=%43 PATH="$ADAPTER_BIN:$PATH" "$ROOT/scripts/claude-agent-status.sh"
+IFS=$'\t' read -r _ claude_state _ claude_source _ <"$XDG_CACHE_HOME/agent-status/panes/adapter-session__43"
+check running "$claude_state" 'Claude adapter records running state'
+check claude "$claude_source" 'Claude adapter records protocol source'
+
 # Configured sessions remain first and unknown sessions preserve source order.
 cat >"$TMP/order.conf" <<'EOF'
 AGENT_STATUS_CONFIG_VERSION=1
@@ -117,7 +127,7 @@ cat >"$FAKE_BIN/tmux" <<'EOF'
 printf '%s\n' "$*" >>"$TMUX_LOG"
 case "$1" in
   list-sessions) printf '20\t$3\tnewest\n10\t$2\tmiddle\n10\t$1\toldest\n' ;;
-  list-panes) printf 'oldest\t0\tmain\t%%7\tbash\tmain\t/tmp\noldest\t1\tcode\t%%8\tclaude\tcode\t/tmp\nmiddle\t0\twork\t%%13\tvim\twork\t/tmp\n' ;;
+  list-panes) printf 'oldest\t0\tmain\t%%7\tbash\tmain\t/tmp\tbash\noldest\t1\tcode\t%%8\tclaude\tcode\t/tmp\tclaude\nmiddle\t0\twork\t%%13\tvim\twork\t/tmp\tvim\n' ;;
 esac
 EOF
 chmod +x "$FAKE_BIN/tmux"
@@ -158,34 +168,57 @@ printf '%s\n' "$*" >>"$PICKER_LOG"
 case "$1" in list-panes) printf 'alpha\t0\tmain\t%%8\tcmd;$(touch nope)\ttitle\t/tmp/a b\n' ;; display-popup) : ;; esac
 EOF
 chmod +x "$PICKER_BIN/fzf" "$PICKER_BIN/tmux"
-{ for n in $(seq 1 14); do printf 'alpha\t%s\twindow %s\t%%%s\tcmd-%s;$(touch nope)\ttitle\t/tmp/a b\n' "$n" "$n" "$n" "$n"; done; } >"$snapshot"
+{ for n in $(seq 1 14); do printf 'alpha\t%s\twindow %s\t%%%s\tcmd-%s;$(touch nope)\ttitle\t/tmp/a b\tcmd-%s\n' "$n" "$n" "$n" "$n" "$n"; done; } >"$snapshot"
 PICKER_ARGS="$TMP/picker.args" PICKER_LOG="$PICKER_LOG" PICKER_ROWS="$PICKER_ROWS" PICKER_SELECTION=$'p\037%8' PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker.sh" alpha "$snapshot" >/dev/null 2>&1 || true
-check_contains '▾ alpha' "$(cat "$PICKER_LOG")" 'picker hierarchy session row'
+check_contains '◆ ▾ alpha' "$(cat "$PICKER_LOG")" 'picker marks the active session hierarchy'
 check_contains 'cmd-14;$(touch nope)' "$(cat "$PICKER_LOG")" 'picker keeps special command inert'
 check_contains 'switch-client -t %8' "$(cat "$PICKER_LOG")" 'picker switches selected pane'
 visible_rows="$(cut -f2- "$PICKER_ROWS")"
 [[ "$visible_rows" != *'%8'* && "$visible_rows" != *'idle'* ]] || fail=1
-check_contains $'\033[38;2;146;131;116m●\033[0m cmd-14' "$visible_rows" 'picker state dot is color-scoped'
+check_contains $'└─ \033[38;2;146;131;116m●\033[0m cmd-14' "$visible_rows" 'picker renders idle pane state dot'
+[[ "$visible_rows" != *'window '* ]] || fail=1
+visible_rows_without_dots="${visible_rows//$'\033[38;2;146;131;116m●\033[0m'/●}"
+[[ "$visible_rows_without_dots" != *$'\033['* ]] || fail=1
 check 1 "$(test -e nope; printf '%s' "$?")" 'picker does not execute command data'
-check_contains 'load:unbind(j,k,/),ctrl-v:change-prompt(  normal › )+rebind(j,k,/),j:down,k:up,/:change-prompt(  filter › )+unbind(j,k,/)' "$(cat "$TMP/picker.args")" 'hierarchy picker modal navigation bindings'
-check_contains 'Enter switch · ↑/↓ move · Ctrl-v j/k navigate · / search · Esc close' "$(cat "$TMP/picker.args")" 'picker modal help'
+check_contains 'ctrl-j:down,ctrl-k:up' "$(cat "$TMP/picker.args")" 'hierarchy picker direct navigation bindings'
+check_contains 'Enter switch · ↑/↓ move · Ctrl-j/k navigate · / search · Esc close' "$(cat "$TMP/picker.args")" 'picker direct navigation help'
+check_contains '--ansi' "$(cat "$TMP/picker.args")" 'hierarchy picker renders ANSI state dots'
+check_contains '--highlight-line' "$(cat "$TMP/picker.args")" 'hierarchy picker highlights the full focused row'
+check_contains 'bg+:#d79921' "$(cat "$TMP/picker.args")" 'hierarchy picker uses Herdr amber selection background'
+check_contains 'fg+:#282828' "$(cat "$TMP/picker.args")" 'hierarchy picker uses dark selected foreground without ANSI overrides'
+check_contains 'printf "  %s\\n" {3}' "$(cat "$TMP/picker.args")" 'picker preview uses full path field'
+check '/tmp/a b' "$(cut -f3 "$PICKER_ROWS" | tail -n 1)" 'picker preview path is field three'
 : >"$PICKER_LOG"
 PICKER_ARGS="$TMP/picker.args" PICKER_LOG="$PICKER_LOG" PICKER_ROWS="$PICKER_ROWS" PICKER_SELECTION=$'s\037alpha' PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker.sh" alpha "$snapshot" >/dev/null 2>&1 || true
 check_contains 'switch-client -t =alpha' "$(cat "$PICKER_LOG")" 'picker switches selected session'
+claude_snapshot="$TMP/claude-pane.tsv"
+"$SCRIPT" set running alpha %15 claude 1
+printf 'alpha\t1\t1\t%%15\t1\t1\t/tmp/claude-project\tbash\n' >"$claude_snapshot"
 : >"$PICKER_LOG"
-PICKER_ARGS="$TMP/picker.args" PICKER_LOG="$PICKER_LOG" PICKER_ROWS="$PICKER_ROWS" PICKER_SELECTION=$'w\037alpha\0378' PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker.sh" alpha "$snapshot" >/dev/null 2>&1 || true
-check_contains 'switch-client -t =alpha' "$(cat "$PICKER_LOG")" 'picker switches selected window session'
-check_contains 'select-window -t :8' "$(cat "$PICKER_LOG")" 'picker switches selected window'
+PICKER_ARGS="$TMP/picker.args" PICKER_LOG="$PICKER_LOG" PICKER_ROWS="$PICKER_ROWS" PICKER_SELECTION=$'p\037%15' PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker.sh" alpha "$claude_snapshot" >/dev/null 2>&1 || true
+check_contains '└─' "$(cut -f2- "$PICKER_ROWS")" 'Claude pane keeps hierarchy connector'
+check_contains $'\033[38;2;125;174;163m●\033[0m claude' "$(cut -f2- "$PICKER_ROWS")" 'picker renders running pane state dot'
+[[ "$(cut -f2 "$PICKER_ROWS")" != *'claude-project'* ]] || fail=1
+tool_snapshot="$TMP/tool-panes.tsv"
+printf 'alpha\t0\topencode\t%%16\topencode\topencode\t/tmp/opencode-project\topencode\nalpha\t0\topencode\t%%17\tzsh\tzsh\t/tmp/zsh-project\tzsh\n' >"$tool_snapshot"
+: >"$PICKER_LOG"
+PICKER_ARGS="$TMP/picker.args" PICKER_LOG="$PICKER_LOG" PICKER_ROWS="$PICKER_ROWS" PICKER_SELECTION=$'p\037%17' PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker.sh" alpha "$tool_snapshot" >/dev/null 2>&1 || true
+tool_rows="$(cut -f2- "$PICKER_ROWS")"
+check_contains $'\033[38;2;146;131;116m●\033[0m opencode' "$tool_rows" 'picker identifies genuine OpenCode pane'
+check_contains $'\033[38;2;146;131;116m●\033[0m zsh' "$tool_rows" 'picker keeps zsh pane distinct from opencode window'
 legacy_snapshot="$TMP/sessions.tsv"
 printf 'alpha\t1\t1\t/tmp/a b\topencode\tbash\ttitle\nbeta\t1\t0\t/tmp/b\tnvim\tnvim\ttitle\n' >"$legacy_snapshot"
 : >"$PICKER_LOG"
 PICKER_ARGS="$TMP/picker.args" PICKER_LOG="$PICKER_LOG" PICKER_ROWS="$PICKER_ROWS" PICKER_SELECTION=beta PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker.sh" alpha "$legacy_snapshot" >/dev/null 2>&1 || true
 check_contains 'start:pos(2)' "$(cat "$TMP/picker.args")" 'session picker keeps initial position binding'
-check_contains 'load:unbind(j,k,/),ctrl-v:change-prompt(  normal › )+rebind(j,k,/),j:down,k:up,/:change-prompt(  filter › )+unbind(j,k,/)' "$(cat "$TMP/picker.args")" 'session picker modal navigation bindings'
+check_contains 'ctrl-j:down,ctrl-k:up' "$(cat "$TMP/picker.args")" 'session picker direct navigation bindings'
+check_contains '--highlight-line' "$(cat "$TMP/picker.args")" 'session picker highlights the full focused row'
 check_contains 'switch-client -t beta' "$(cat "$PICKER_LOG")" 'session picker Enter behavior'
 : >"$PICKER_LOG"
 PICKER_LOG="$PICKER_LOG" PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker-wrapper.sh" alpha /tmp >/dev/null || true
-check_contains 'display-popup -d /tmp -w 90% -h 80%' "$(cat "$PICKER_LOG")" 'picker popup percentage sizing'
+popup_command="$(cat "$PICKER_LOG")"
+check_contains 'display-popup -d /tmp -w 90% -h 80% -b rounded' "$popup_command" 'picker popup percentage sizing with rounded border'
+check_contains '-S fg=#d79921' "$popup_command" 'picker popup border uses Herdr amber'
 check 1 "$(grep -c '^list-panes -a' "$PICKER_LOG" || true)" 'picker opens with one bulk snapshot'
 
 # Sound is opt-in, synchronous for deterministic tests, and deduplicated by
