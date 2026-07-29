@@ -19,7 +19,7 @@ notify_attention_state() {
 }
 
 notify_sound_status() {
-  local backend="$AGENT_STATUS_SOUND_BACKEND" sound="$AGENT_STATUS_SOUND_FILE"
+  local backend="$AGENT_STATUS_SOUND_BACKEND" sound="${1:-$AGENT_STATUS_SOUND_FILE}"
   [[ "$AGENT_STATUS_SOUND_ENABLED" == 1 ]] || { printf 'disabled'; return; }
   case "$backend" in afplay|paplay) ;; *) printf 'unsupported_backend'; return ;; esac
   command -v "$backend" >/dev/null 2>&1 || { printf 'backend_missing'; return; }
@@ -42,7 +42,8 @@ notify_transition() {
   local sound="$AGENT_STATUS_SOUND_FILE" ledger key now last=0 tmp
   [[ "$AGENT_STATUS_SOUND_ENABLED" == 1 ]] || return 0
   notify_attention_state "$state" || return 0
-  case "$(notify_sound_status)" in
+  [[ "$state" != done ]] || sound="/System/Library/Sounds/Hero.aiff"
+  case "$(notify_sound_status "$sound")" in
     ready) ;;
     unsupported_backend) notify_debug "unsupported backend: $backend"; return 0 ;;
     backend_missing) notify_debug "backend unavailable: $backend"; return 0 ;;

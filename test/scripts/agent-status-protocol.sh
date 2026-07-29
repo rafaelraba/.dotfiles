@@ -204,7 +204,7 @@ chmod +x "$SOUND_BIN/afplay" "$SOUND_BIN/paplay"
 cat >"$TMP/sound.conf" <<EOF
 AGENT_STATUS_CONFIG_VERSION=1
 AGENT_STATUS_SOUND_ENABLED=1
-AGENT_STATUS_SOUND_STATES=(permission error)
+AGENT_STATUS_SOUND_STATES=(permission done error)
 AGENT_STATUS_SOUND_COOLDOWN=30
 AGENT_STATUS_SOUND_BACKEND=afplay
 AGENT_STATUS_SOUND_FILE="$SOUND_FILE"
@@ -219,9 +219,13 @@ check 2 "$(wc -l <"$SOUND_LOG" | tr -d ' ')" 'sound cooldown and expiry'
 check "1:$SOUND_FILE" "$(sed -n '1p' "$SOUND_LOG")" 'sound path remains one argv'
 sound_set 141 error 4
 check 3 "$(wc -l <"$SOUND_LOG" | tr -d ' ')" 'distinct attention event has separate ledger identity'
+sound_set 142 done 5
+sound_set 150 done 6
+check 4 "$(wc -l <"$SOUND_LOG" | tr -d ' ')" 'done sound cooldown'
+check '1:/System/Library/Sounds/Hero.aiff' "$(sed -n '4p' "$SOUND_LOG")" 'done uses the macOS Hero sound'
 sed 's/AGENT_STATUS_SOUND_BACKEND=afplay/AGENT_STATUS_SOUND_BACKEND=paplay/' "$TMP/sound.conf" >"$TMP/paplay.conf"
-AGENT_STATUS_CONFIG="$TMP/paplay.conf" AGENT_STATUS_NOW=142 SOUND_LOG="$SOUND_LOG" PATH="$SOUND_BIN:$PATH" "$SCRIPT" set error sound %10 adapter 5
-check 4 "$(wc -l <"$SOUND_LOG" | tr -d ' ')" 'allowlisted paplay backend'
+AGENT_STATUS_CONFIG="$TMP/paplay.conf" AGENT_STATUS_NOW=152 SOUND_LOG="$SOUND_LOG" PATH="$SOUND_BIN:$PATH" "$SCRIPT" set error sound %10 adapter 5
+check 5 "$(wc -l <"$SOUND_LOG" | tr -d ' ')" 'allowlisted paplay backend'
 
 # An allowlist rejection or unavailable backend is quiet unless debug is opted in;
 # both cases leave the visual protocol state intact.
@@ -252,7 +256,7 @@ AGENT_STATUS_CONFIG_VERSION=1
 AGENT_STATUS_SOUND_ENABLED=0
 EOF
 macos_default_output="$(AGENT_STATUS_CONFIG="$TMP/macos-default.conf" AGENT_STATUS_PLATFORM=Darwin AGENT_STATUS_NOW=200 SOUND_LOG="$SOUND_LOG" PATH="$FAKE_BIN:$SOUND_BIN:$PATH" "$SCRIPT" set permission macos %13 adapter 1 2>&1)"
-check "1:/System/Library/Sounds/Glass.aiff" "$(sed -n '5p' "$SOUND_LOG")" 'macOS default sound remains one argv'
+check "1:/System/Library/Sounds/Glass.aiff" "$(sed -n '6p' "$SOUND_LOG")" 'macOS default sound remains one argv'
 check permission "$(AGENT_STATUS_CONFIG="$TMP/macos-default.conf" AGENT_STATUS_PLATFORM=Darwin AGENT_STATUS_NOW=200 PATH="$PATH" "$SCRIPT" get macos)" 'macOS default preserves visual state'
 
 # Doctor reports disabled, unsafe, missing backend/file, and ready setups
