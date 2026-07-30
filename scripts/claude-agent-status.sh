@@ -27,7 +27,7 @@ PY
 )"
 
 set_status() {
-  "$AGENT_STATUS_SCRIPT" set "$1" >/dev/null 2>&1 || true
+  "$AGENT_STATUS_SCRIPT" set "$1" "" "" claude "$(date +%s)" >/dev/null 2>&1 || true
 }
 
 case "$hook_event_name" in

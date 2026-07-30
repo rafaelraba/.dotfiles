@@ -99,6 +99,6 @@ exec tmux display-popup \
     -d "$PANEDIR" \
     -w 90% -h 80% -b rounded \
     -s "bg=#1d2021,fg=#d4be98" \
-    -S "fg=#a9b665" \
+    -S "fg=#d79921" \
     -T " workspace · $SESSION_COUNT sessions " \
     -E "$picker_command"

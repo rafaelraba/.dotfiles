@@ -22,91 +22,38 @@ source "$ROOT/agent-status/store.sh"
 source "$ROOT/agent-status/order.sh"
 agent_status_load_config || exit 0
 
-FZF_MODAL_BIND="load:unbind(j,k,/),ctrl-v:change-prompt(  normal › )+rebind(j,k,/),j:down,k:up,/:change-prompt(  filter › )+unbind(j,k,/)"
-
-# Bulk snapshots have pane identity in field four; retain the legacy picker for
-# older session-list captures.
-IFS=$'\t' read -r _ _ _ snapshot_pane _ < "${sessions_file:-/dev/null}" || true
-if [[ "$snapshot_pane" == %* ]]; then
-	picker_state() {
-		local session="$1" pane="$2" safe_session
-		safe_session="$(printf '%s' "$session" | tr -c '[:alnum:]_.-' '_')"
-		store_effective "$PANE_DIR/${safe_session}_${pane//%/_}"
-	}
-	picker_dot_color() {
-		case "$1" in running) printf '125;174;163' ;; permission) printf '238;212;159' ;; waiting_for_input|blocked) printf '216;166;87' ;; done) printf '169;182;101' ;; error) printf '234;105;98' ;; *) printf '146;131;116' ;; esac
-	}
-	picker_rows() {
-		local last_session='' last_window='' session index window pane command title path state marker sep=$'\037'
-		while IFS=$'\t' read -r session index window pane command title path; do
-			[[ -n "$session" && "$pane" == %* ]] || continue
-			command="${command//$'\t'/ }"; title="${title//$'\t'/ }"; path="${path//$'\t'/ }"
-			if [[ "$session" != "$last_session" ]]; then
-				marker='  '; [[ "$session" == "$current" ]] && marker='› '
-				printf 's%s%s\t%s▾ %s\n' "$sep" "$session" "$marker" "$session"; last_session="$session"; last_window=''
-			fi
-			if [[ "$index:$window" != "$last_window" ]]; then printf 'w%s%s%s%s\t  ├─ %s · %s\n' "$sep" "$session" "$sep" "$index" "$index" "$window"; last_window="$index:$window"; fi
-			state="$(picker_state "$session" "$pane")"
-			printf 'p%s%s\t  │  \033[38;2;%sm●\033[0m %s%s\n' "$sep" "$pane" "$(picker_dot_color "$state")" "$command" "${path:+ · $path}"
-		done < <(agent_status_order_session_rows < "$sessions_file")
-	}
-	selected="$({ picker_rows || true; } | fzf --ansi --layout=reverse --no-border --delimiter=$'\t' --with-nth=2.. --prompt='  filter › ' --header='Enter switch · ↑/↓ move · Ctrl-v j/k navigate · / search · Esc close' --pointer='❯ ' --cycle --bind="$FZF_MODAL_BIND" --no-info --no-sort)" || exit 0
-	target="${selected%%$'\t'*}"
-	type="${target%%$'\037'*}"; payload="${target#*$'\037'}"
-	case "$type" in
-		s) tmux switch-client -t "=$payload" ;;
-		w) session="${payload%%$'\037'*}"; index="${payload#*$'\037'}"; tmux switch-client -t "=$session" && tmux select-window -t ":$index" ;;
-		p) tmux switch-client -t "$payload" ;;
-	esac
-	exit 0
-fi
-
-# Gruvbox Material dark hard.
-BG="#1d2021"
-BG_ACTIVE="#282828"
-FG="#d4be98"
-FG_ACTIVE="#ddc7a1"
-SUBTLE="#928374"
-GREEN="#a9b665"
-BLUE="#7daea3"
-VIOLET="#d3869b"
-RED="#ea6962"
-ORANGE="#d8a657"
-DIM="#665c54"
-
-FZF_COLORS="bg:${BG},bg+:${BG_ACTIVE},gutter:${BG},fg:${FG},fg+:${FG_ACTIVE}"
-FZF_COLORS="${FZF_COLORS},hl:${GREEN},hl+:${GREEN},border:${GREEN},label:${VIOLET}"
-FZF_COLORS="${FZF_COLORS},header:${SUBTLE},pointer:${ORANGE},marker:${FG_ACTIVE},prompt:${GREEN}"
-FZF_COLORS="${FZF_COLORS},spinner:${BLUE},info:${SUBTLE},query:${FG_ACTIVE},separator:${SUBTLE},scrollbar:${SUBTLE}"
-
-agent_state() {
-	"$ROOT/agent-status.sh" summary "$1" 2>/dev/null || printf 'state=idle\n'
-}
-
-state_color() {
-	case "$1" in
-		running) printf '125;174;163' ;;
-		blocked) printf '216;166;87' ;;
-		done) printf '169;182;101' ;;
-		error) printf '234;105;98' ;;
-		*) printf '146;131;116' ;;
-	esac
-}
-
 active_tool() {
 	local window_name="$1"
 	local command="$2"
 	local pane_title="$3"
+	local start_command="${4:-}"
+	local source="${5:-}"
 
-	case "$pane_title" in
-	π*) printf 'pi' ;;
+	case "$source:$pane_title" in
+	claude:*) printf 'claude' ;;
+	*:π*) printf 'pi' ;;
 	*)
-		case "$window_name" in
-		opencode | nvim | claude | pi) printf '%s' "$window_name" ;;
+		case "$command:$start_command" in
+		*claude* | *Claude*) printf 'claude' ;;
+		opencode:* | *:opencode | *:opencode\ *) printf 'opencode' ;;
+		nvim:* | *:nvim | *:nvim\ *) printf 'nvim' ;;
+		pi:* | *:pi | *:pi\ *) printf 'pi' ;;
 		*) printf '%s' "$command" ;;
 		esac
 		;;
 	esac
+}
+
+picker_source() {
+	local session="$1"
+	local pane="$2"
+	local safe_session file _ source
+
+	safe_session="$(printf '%s' "$session" | tr -c '[:alnum:]_.-' '_')"
+	file="$PANE_DIR/${safe_session}_${pane//%/_}"
+	[[ -f "$file" ]] || return
+	IFS=$'\t' read -r _ _ _ source _ < "$file" || true
+	printf '%s' "$source"
 }
 
 project_name() {
@@ -118,6 +65,84 @@ project_name() {
 	fi
 
 	printf '%s' "${path##*/}"
+}
+
+FZF_MODAL_BIND="ctrl-j:down,ctrl-k:up"
+
+BG="#282828"
+FG="#a89984"
+FG_ACTIVE="#ebdbb2"
+SUBTLE="#928374"
+AMBER="#d79921"
+DIM="#504945"
+
+state_color() {
+	case "$1" in
+		running) printf '125;174;163' ;;
+		permission) printf '238;212;159' ;;
+		blocked | waiting_for_input) printf '216;166;87' ;;
+		done) printf '169;182;101' ;;
+		error) printf '234;105;98' ;;
+		*) printf '146;131;116' ;;
+	esac
+}
+
+pane_state() {
+	local session="$1" pane="$2" safe_session file
+
+	safe_session="$(printf '%s' "$session" | tr -c '[:alnum:]_.-' '_')"
+	file="$PANE_DIR/${safe_session}_${pane//%/_}"
+	store_effective "$file"
+}
+
+state_dot() {
+	local color
+
+	[[ -n "${NO_COLOR:-}${AGENT_STATUS_NO_COLOR:-}" ]] && { printf '●'; return; }
+	color="$(state_color "$1")"
+	printf '\033[38;2;%sm●\033[0m' "$color"
+}
+
+# Match Herdr's navigator: the focused row is a single amber surface, not a
+# muted background behind otherwise independently colored tree fragments.
+FZF_COLORS="bg:${BG},bg+:${AMBER},gutter:${BG},fg:${FG},fg+:${BG}"
+FZF_COLORS="${FZF_COLORS},hl:${AMBER},hl+:${BG},border:${DIM},label:${FG}"
+FZF_COLORS="${FZF_COLORS},header:${SUBTLE},pointer:${BG},marker:${BG},prompt:${AMBER}"
+FZF_COLORS="${FZF_COLORS},spinner:${AMBER},info:${SUBTLE},query:${FG_ACTIVE},separator:${DIM},scrollbar:${SUBTLE}"
+
+# Bulk snapshots have pane identity in field four; retain the legacy picker for
+# older session-list captures.
+IFS=$'\t' read -r _ _ _ snapshot_pane _ < "${sessions_file:-/dev/null}" || true
+if [[ "$snapshot_pane" == %* ]]; then
+	picker_rows() {
+		local last_session='' session index window pane command title path start_command source tool state dot marker sep=$'\037'
+		while IFS=$'\t' read -r session index window pane command title path start_command; do
+			[[ -n "$session" && "$pane" == %* ]] || continue
+			command="${command//$'\t'/ }"; title="${title//$'\t'/ }"; path="${path//$'\t'/ }"; start_command="${start_command//$'\t'/ }"
+			if [[ "$session" != "$last_session" ]]; then
+				marker='  '; [[ "$session" == "$current" ]] && marker='◆ '
+				printf 's%s%s\t%s▾ %s\t%s\n' "$sep" "$session" "$marker" "$session" "$path"
+				last_session="$session"
+			fi
+			source="$(picker_source "$session" "$pane")"
+			tool="$(active_tool "$window" "$command" "$title" "$start_command" "$source")"
+			state="$(pane_state "$session" "$pane")"
+			dot="$(state_dot "$state")"
+			printf 'p%s%s\t  └─ %s %s\t%s\n' "$sep" "$pane" "$dot" "$tool" "$path"
+		done < <(agent_status_order_session_rows < "$sessions_file")
+	}
+	selected="$({ picker_rows || true; } | fzf --ansi --highlight-line --layout=reverse --no-border --delimiter=$'\t' --with-nth=2 --prompt='  filter › ' --header='Enter switch · ↑/↓ move · Ctrl-j/k navigate · / search · Esc close' --pointer='❯ ' --cycle --bind="$FZF_MODAL_BIND" --preview='printf "  %s\\n" {3}' --preview-window='down,1,wrap,border-top' --no-info --no-sort --color="${FZF_COLORS}")" || exit 0
+	target="${selected%%$'\t'*}"
+	type="${target%%$'\037'*}"; payload="${target#*$'\037'}"
+	case "$type" in
+		s) tmux switch-client -t "=$payload" ;;
+		p) tmux switch-client -t "$payload" ;;
+	esac
+	exit 0
+fi
+
+agent_state() {
+	"$ROOT/agent-status.sh" summary "$1" 2>/dev/null || printf 'state=idle\n'
 }
 
 initial_selection_position() {
@@ -159,11 +184,11 @@ initial_selection_position() {
 
 session_rows() {
 	local names=()
-	local projects=()
+	local paths=()
 	local tools=()
 	local name path window_name command pane_title tool project
 	local current_index=-1
-	local count start offset i summary state state_color symbol label name_width tool_width project_width
+	local count start offset i summary state state_color symbol label name_width tool_width
 
 	# Leer sesiones desde archivo pre-capturado o consultar tmux directamente
 	if [[ -n "${sessions_file:-}" && -r "$sessions_file" ]]; then
@@ -174,7 +199,7 @@ session_rows() {
 			fi
 			names+=("$name")
 			tools+=("$(active_tool "$window_name" "$command" "$pane_title")")
-			projects+=("$(project_name "$path")")
+			paths+=("$path")
 		done < <(agent_status_order_session_rows < "$sessions_file")
 	else
 		while IFS=$'\t' read -r name _ _ path window_name command pane_title; do
@@ -184,7 +209,7 @@ session_rows() {
 			fi
 			names+=("$name")
 			tools+=("$(active_tool "$window_name" "$command" "$pane_title")")
-			projects+=("$(project_name "$path")")
+			paths+=("$path")
 		done < <(
 			tmux list-sessions \
 				-f '#{?#{m:_*,#{session_name}},0,1}' \
@@ -198,7 +223,6 @@ session_rows() {
 
 	name_width=18
 	tool_width=8
-	project_width=8
 	for name in "${names[@]}"; do
 		if ((${#name} > name_width)); then
 			name_width=${#name}
@@ -207,11 +231,6 @@ session_rows() {
 	for tool in "${tools[@]}"; do
 		if ((${#tool} > tool_width)); then
 			tool_width=${#tool}
-		fi
-	done
-	for project in "${projects[@]}"; do
-		if ((${#project} > project_width)); then
-			project_width=${#project}
 		fi
 	done
 
@@ -224,7 +243,7 @@ session_rows() {
 		i=$(((start + offset) % count))
 		name="${names[$i]}"
 		tool="${tools[$i]}"
-		project="${projects[$i]}"
+		project="${paths[$i]}"
 		summary="$(agent_state "$name")"
 		state="${summary#state=}"
 		state="${state%%$'\t'*}"
@@ -234,21 +253,21 @@ session_rows() {
 
 		if [[ "$name" == "$current" ]]; then
 			# The active session is a distinct visual layer, not a state color.
-			row_prefix=$'\033[48;2;50;45;64m'
-			name_color="1;38;2;221;199;161"
-			marker=$'\033[38;2;211;134;155m› '
+			row_prefix=$'\033[48;2;60;56;46m'
+			name_color="1;38;2;189;174;147"
+			marker=$'\033[38;2;215;153;33m› '
 		else
 			row_prefix=""
-			name_color="38;2;146;131;116"
+			name_color="38;2;168;153;132"
 			marker="  "
 		fi
-		win_color="38;2;125;174;163"
+		win_color="38;2;189;174;147"
 
 		if [[ -n "${NO_COLOR:-}${AGENT_STATUS_NO_COLOR:-}" ]]; then
-			printf '%s\t%s%-*s  %-*s  %-*s  %s %s\n' "$name" "$marker" "$name_width" "$name" "$tool_width" "$tool" "$project_width" "$project" "$symbol" "$label"
+			printf '%s\t%s%-*s  %-*s  %s %s\t%s\n' "$name" "$marker" "$name_width" "$name" "$tool_width" "$tool" "$symbol" "$label" "$project"
 		else
-			printf '%s\t%s%s\033[%sm%-*s  \033[38;2;125;174;163m%-*s  \033[38;2;146;131;116m󰉋 %-*s  \033[38;2;%sm%s %-8s\033[0m\n' \
-				"$name" "$row_prefix" "$marker" "$name_color" "$name_width" "$name" "$tool_width" "$tool" "$project_width" "$project" "$state_color" "$symbol" "$label"
+			printf '%s\t%s%s\033[%sm%-*s  \033[38;2;189;174;147m%-*s  \033[38;2;%sm%s %-8s\033[0m\t%s\n' \
+				"$name" "$row_prefix" "$marker" "$name_color" "$name_width" "$name" "$tool_width" "$tool" "$state_color" "$symbol" "$label" "$project"
 		fi
 	done
 }
@@ -258,10 +277,11 @@ initial_selection="$(initial_selection_position)"
 selected="$({ session_rows || true; } |
 	fzf \
 		--ansi \
+		--highlight-line \
 		--layout=reverse \
 		--no-border \
 		--delimiter=$'\t' \
-		--with-nth=2.. \
+		--with-nth=2 \
 		--prompt='  filter › ' \
 		--pointer='❯ ' \
 		--marker='• ' \
@@ -269,7 +289,9 @@ selected="$({ session_rows || true; } |
 		--cycle \
 		--bind="start:pos($initial_selection)" \
 		--bind="$FZF_MODAL_BIND" \
-		--header='Enter switch · ↑/↓ move · Ctrl-v j/k navigate · / search · Esc close' \
+		--preview='printf "  %s\\n" {3}' \
+		--preview-window='down,1,wrap,border-top' \
+		--header='Enter switch · ↑/↓ move · Ctrl-j/k navigate · / search · Esc close' \
 		--scroll-off=1 \
 		--no-info \
 		--tiebreak=index \
