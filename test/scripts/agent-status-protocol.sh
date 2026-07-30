@@ -215,7 +215,10 @@ visible_rows="$(cut -f2- "$PICKER_ROWS")"
 [[ "$visible_rows" != *'%8'* && "$visible_rows" != *'idle'* ]] || fail=1
 check_contains $'└─ \033[38;2;146;131;116m●\033[0m cmd-14' "$visible_rows" 'picker renders idle pane state dot'
 [[ "$visible_rows" != *'window '* ]] || fail=1
-visible_rows_without_dots="${visible_rows//$'\033[38;2;146;131;116m●\033[0m'/●}"
+visible_rows_without_dots="$visible_rows"
+for state_dot_color in '125;174;163' '238;212;159' '216;166;87' '169;182;101' '234;105;98' '146;131;116'; do
+	visible_rows_without_dots="${visible_rows_without_dots//$'\033[38;2;'"$state_dot_color"$'m●\033[0m'/●}"
+done
 [[ "$visible_rows_without_dots" != *$'\033['* ]] || fail=1
 check 1 "$(test -e nope; printf '%s' "$?")" 'picker does not execute command data'
 check_contains 'ctrl-j:down,ctrl-k:up' "$(cat "$TMP/picker.args")" 'hierarchy picker direct navigation bindings'
