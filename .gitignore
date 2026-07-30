@@ -15,3 +15,5 @@ Thumbs.db
 
 # Zim modules (se reinstalan automáticamente)
 shell/zsh/.zim/modules/
+# Local Pi runtime state
+.atl/
