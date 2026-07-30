@@ -67,7 +67,8 @@ project_name() {
 	printf '%s' "${path##*/}"
 }
 
-FZF_MODAL_BIND="ctrl-j:down,ctrl-k:up"
+FZF_MODAL_BIND="ctrl-j:down,ctrl-k:up,j:down,k:up,/:change-prompt(  filter › )+unbind(j,k,/)"
+FZF_PICKER_HEADER='Enter switch · j/k or ↑/↓ move · Ctrl-j/k navigate · / search · Esc close'
 
 BG="#282828"
 FG="#a89984"
@@ -131,7 +132,7 @@ if [[ "$snapshot_pane" == %* ]]; then
 			printf 'p%s%s\t  └─ %s %s\t%s\n' "$sep" "$pane" "$dot" "$tool" "$path"
 		done < <(agent_status_order_session_rows < "$sessions_file")
 	}
-	selected="$({ picker_rows || true; } | fzf --ansi --highlight-line --layout=reverse --no-border --delimiter=$'\t' --with-nth=2 --prompt='  filter › ' --header='Enter switch · ↑/↓ move · Ctrl-j/k navigate · / search · Esc close' --pointer='❯ ' --cycle --bind="$FZF_MODAL_BIND" --preview='printf "  %s\\n" {3}' --preview-window='down,1,wrap,border-top' --no-info --no-sort --color="${FZF_COLORS}")" || exit 0
+	selected="$({ picker_rows || true; } | fzf --ansi --highlight-line --layout=reverse --no-border --delimiter=$'\t' --with-nth=2 --prompt='  navigate › ' --header="$FZF_PICKER_HEADER" --pointer='❯ ' --cycle --bind="$FZF_MODAL_BIND" --preview='printf "  %s\\n" {3}' --preview-window='down,1,wrap,border-top' --no-info --no-sort --color="${FZF_COLORS}")" || exit 0
 	target="${selected%%$'\t'*}"
 	type="${target%%$'\037'*}"; payload="${target#*$'\037'}"
 	case "$type" in
@@ -282,7 +283,7 @@ selected="$({ session_rows || true; } |
 		--no-border \
 		--delimiter=$'\t' \
 		--with-nth=2 \
-		--prompt='  filter › ' \
+		--prompt='  navigate › ' \
 		--pointer='❯ ' \
 		--marker='• ' \
 		--ellipsis='…' \
@@ -291,7 +292,7 @@ selected="$({ session_rows || true; } |
 		--bind="$FZF_MODAL_BIND" \
 		--preview='printf "  %s\\n" {3}' \
 		--preview-window='down,1,wrap,border-top' \
-		--header='Enter switch · ↑/↓ move · Ctrl-j/k navigate · / search · Esc close' \
+		--header="$FZF_PICKER_HEADER" \
 		--scroll-off=1 \
 		--no-info \
 		--tiebreak=index \
