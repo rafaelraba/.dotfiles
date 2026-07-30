@@ -221,8 +221,9 @@ for state_dot_color in '125;174;163' '238;212;159' '216;166;87' '169;182;101' '2
 done
 [[ "$visible_rows_without_dots" != *$'\033['* ]] || fail=1
 check 1 "$(test -e nope; printf '%s' "$?")" 'picker does not execute command data'
-check_contains 'ctrl-j:down,ctrl-k:up' "$(cat "$TMP/picker.args")" 'hierarchy picker direct navigation bindings'
-check_contains 'Enter switch · ↑/↓ move · Ctrl-j/k navigate · / search · Esc close' "$(cat "$TMP/picker.args")" 'picker direct navigation help'
+check_contains 'ctrl-j:down,ctrl-k:up,j:down,k:up,/:change-prompt(  filter › )+unbind(j,k,/)' "$(cat "$TMP/picker.args")" 'hierarchy picker starts in navigation mode and slash enables input'
+check_contains '  navigate › ' "$(cat "$TMP/picker.args")" 'hierarchy picker starts with navigation prompt'
+check_contains 'Enter switch · j/k or ↑/↓ move · Ctrl-j/k navigate · / search · Esc close' "$(cat "$TMP/picker.args")" 'picker navigation-first help'
 check_contains '--ansi' "$(cat "$TMP/picker.args")" 'hierarchy picker renders ANSI state dots'
 check_contains '--highlight-line' "$(cat "$TMP/picker.args")" 'hierarchy picker highlights the full focused row'
 check_contains 'bg+:#d79921' "$(cat "$TMP/picker.args")" 'hierarchy picker uses Herdr amber selection background'
@@ -252,7 +253,8 @@ printf 'alpha\t1\t1\t/tmp/a b\topencode\tbash\ttitle\nbeta\t1\t0\t/tmp/b\tnvim\t
 : >"$PICKER_LOG"
 PICKER_ARGS="$TMP/picker.args" PICKER_LOG="$PICKER_LOG" PICKER_ROWS="$PICKER_ROWS" PICKER_SELECTION=beta PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker.sh" alpha "$legacy_snapshot" >/dev/null 2>&1 || true
 check_contains 'start:pos(2)' "$(cat "$TMP/picker.args")" 'session picker keeps initial position binding'
-check_contains 'ctrl-j:down,ctrl-k:up' "$(cat "$TMP/picker.args")" 'session picker direct navigation bindings'
+check_contains 'ctrl-j:down,ctrl-k:up,j:down,k:up,/:change-prompt(  filter › )+unbind(j,k,/)' "$(cat "$TMP/picker.args")" 'session picker starts in navigation mode and slash enables input'
+check_contains '  navigate › ' "$(cat "$TMP/picker.args")" 'session picker starts with navigation prompt'
 check_contains '--highlight-line' "$(cat "$TMP/picker.args")" 'session picker highlights the full focused row'
 check_contains 'switch-client -t beta' "$(cat "$PICKER_LOG")" 'session picker Enter behavior'
 : >"$PICKER_LOG"
