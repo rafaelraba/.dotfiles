@@ -29,16 +29,21 @@ active_tool() {
 	local start_command="${4:-}"
 	local source="${5:-}"
 
-	case "$source:$pane_title" in
-	claude:*) printf 'claude' ;;
-	*:π*) printf 'pi' ;;
+	case "$source" in
+	claude | opencode | nvim | pi) printf '%s' "$source" ;;
 	*)
-		case "$command:$start_command" in
-		*claude* | *Claude*) printf 'claude' ;;
-		opencode:* | *:opencode | *:opencode\ *) printf 'opencode' ;;
-		nvim:* | *:nvim | *:nvim\ *) printf 'nvim' ;;
-		pi:* | *:pi | *:pi\ *) printf 'pi' ;;
-		*) printf '%s' "$command" ;;
+		case "$pane_title" in
+		*π*) printf 'pi' ;;
+		*Claude\ Code*) printf 'claude' ;;
+		*)
+			case "$command:$start_command" in
+			*claude* | *Claude*) printf 'claude' ;;
+			opencode:* | *:opencode | *:opencode\ *) printf 'opencode' ;;
+			nvim:* | *:nvim | *:nvim\ *) printf 'nvim' ;;
+			pi:* | *:pi | *:pi\ *) printf 'pi' ;;
+			*) printf '%s' "$command" ;;
+			esac
+			;;
 		esac
 		;;
 	esac

@@ -255,6 +255,21 @@ PICKER_ARGS="$TMP/picker.args" PICKER_LOG="$PICKER_LOG" PICKER_ROWS="$PICKER_ROW
 check_contains '└─' "$(cut -f2- "$PICKER_ROWS")" 'Claude pane keeps hierarchy connector'
 check_contains $'\033[38;2;125;174;163m●\033[0m claude' "$(cut -f2- "$PICKER_ROWS")" 'picker renders running pane state dot'
 [[ "$(cut -f2 "$PICKER_ROWS")" != *'claude-project'* ]] || fail=1
+claude_title_snapshot="$TMP/claude-title-pane.tsv"
+printf 'alpha\t1\tmain\t%%18\t2.1.220\t✳ Claude Code\t/tmp/claude-title-project\tbash\n' >"$claude_title_snapshot"
+: >"$PICKER_LOG"
+PICKER_ARGS="$TMP/picker.args" PICKER_LOG="$PICKER_LOG" PICKER_ROWS="$PICKER_ROWS" PICKER_SELECTION=$'p\037%18' PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker.sh" alpha "$claude_title_snapshot" >/dev/null 2>&1 || true
+claude_title_rows="$(cut -f2- "$PICKER_ROWS")"
+check_contains $'\033[38;2;146;131;116m●\033[0m claude' "$claude_title_rows" 'picker identifies Claude Code title without cache source'
+[[ "$claude_title_rows" != *'2.1.220'* ]] || fail=1
+opencode_title_snapshot="$TMP/opencode-title-pane.tsv"
+"$SCRIPT" set running alpha %19 opencode 1
+printf 'alpha\t1\topencode\t%%19\t2.1.220\t✳ Claude Code\t/tmp/opencode-title-project\tbash\n' >"$opencode_title_snapshot"
+: >"$PICKER_LOG"
+PICKER_ARGS="$TMP/picker.args" PICKER_LOG="$PICKER_LOG" PICKER_ROWS="$PICKER_ROWS" PICKER_SELECTION=$'p\037%19' PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker.sh" alpha "$opencode_title_snapshot" >/dev/null 2>&1 || true
+opencode_title_rows="$(cut -f2- "$PICKER_ROWS")"
+check_contains $'\033[38;2;125;174;163m●\033[0m opencode' "$opencode_title_rows" 'picker prioritizes OpenCode cache source over Claude Code title'
+[[ "$opencode_title_rows" != *'claude'* && "$opencode_title_rows" != *'2.1.220'* ]] || fail=1
 tool_snapshot="$TMP/tool-panes.tsv"
 printf 'alpha\t0\topencode\t%%16\topencode\topencode\t/tmp/opencode-project\topencode\nalpha\t0\topencode\t%%17\tzsh\tzsh\t/tmp/zsh-project\tzsh\n' >"$tool_snapshot"
 : >"$PICKER_LOG"
