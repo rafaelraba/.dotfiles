@@ -58,8 +58,8 @@ check idle "$("$SCRIPT" get malformed)" 'malformed record recovery'
 wait
 check done "$("$SCRIPT" get race)" 'last accepted event'
 
-# The OpenCode adapter supplies its source and a monotonic process-local event ID
-# while leaving tmux identity resolution to the protocol script.
+# The OpenCode adapter supplies its source and a monotonic process-local event ID,
+# and keeps only active states fresh without retaining the process after terminal state.
 ADAPTER_BIN="$TMP/adapter-bin"
 mkdir -p "$ADAPTER_BIN"
 cat >"$ADAPTER_BIN/tmux" <<'EOF'
@@ -73,15 +73,53 @@ chmod +x "$ADAPTER_BIN/tmux"
 "$SCRIPT" set idle adapter-session %42 previous 999
 HOME=/Users/rafaba TMUX=/tmp/tmux-test TMUX_PANE= PATH="$ADAPTER_BIN:$PATH" bun -e '
   Date.now = () => 1000
+  let callback
+  let intervalCount = 0
+  let intervalMs = 0
+  let timerCleared = false
+  let timerUnrefed = false
+  const timer = { unref: () => { timerUnrefed = true } }
+  globalThis.setInterval = (next, ms) => {
+    callback = next
+    intervalCount += 1
+    intervalMs = ms
+    return timer
+  }
+  globalThis.clearInterval = (candidate) => {
+    if (candidate === timer) timerCleared = true
+  }
   const plugin = (await import(process.argv[1])).TmuxAgentStatusPlugin
   const hooks = await plugin({})
   await hooks["chat.message"]({ sessionID: "one" })
   await hooks["chat.message"]({ sessionID: "two" })
-' "$ROOT/editors/opencode/plugins/tmux-agent-status.ts"
+  if (intervalCount !== 1 || intervalMs !== 240000 || !timerUnrefed) {
+    throw new Error("OpenCode heartbeat must be single, bounded, and unrefed")
+  }
+  callback()
+  const heartbeatRecord = await Bun.file(process.argv[2]).text()
+  if (!heartbeatRecord.endsWith("\topencode\t1002\n")) {
+    throw new Error("active OpenCode state was not refreshed")
+  }
+  await hooks.event({ event: { type: "session.idle", properties: { sessionID: "two" } } })
+  if (!timerCleared) throw new Error("terminal OpenCode state did not stop heartbeat")
+  const terminalRecord = await Bun.file(process.argv[2]).text()
+  if (!terminalRecord.includes("\tdone\t") || !terminalRecord.endsWith("\topencode\t1003\n")) {
+    throw new Error("terminal OpenCode state was not recorded")
+  }
+  callback()
+  if (await Bun.file(process.argv[2]).text() !== terminalRecord) {
+    throw new Error("terminal OpenCode state kept heartbeating")
+  }
+ ' "$ROOT/editors/opencode/plugins/tmux-agent-status.ts" "$XDG_CACHE_HOME/agent-status/panes/adapter-session__42"
 IFS=$'\t' read -r _ adapter_state _ adapter_source adapter_event <"$XDG_CACHE_HOME/agent-status/panes/adapter-session__42"
-check running "$adapter_state" 'OpenCode event supersedes older record'
+check done "$adapter_state" 'OpenCode terminal event supersedes older record'
 check opencode "$adapter_source" 'OpenCode protocol source'
-check 1001 "$adapter_event" 'OpenCode same-millisecond monotonic event ID'
+check 1003 "$adapter_event" 'OpenCode heartbeat keeps monotonic event IDs'
+if [[ "${AGENT_STATUS_PROTOCOL_FOCUS:-}" == "opencode-heartbeat" ]]; then
+  ((fail)) && exit 1
+  printf 'OpenCode heartbeat protocol checks passed\n'
+  exit 0
+fi
 
 # Claude preserves its producer identity so presentation can identify the agent
 # even when tmux displays a transient command or title.
