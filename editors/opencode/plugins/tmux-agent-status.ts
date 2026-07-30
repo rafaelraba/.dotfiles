@@ -24,6 +24,9 @@ function nextEventID(): number {
 }
 
 interface EventPayload {
+  info?: {
+    id?: string
+  }
   sessionID?: string
   status?: {
     type?: string
@@ -63,7 +66,8 @@ function eventType(event: unknown): string {
 }
 
 export const TmuxAgentStatusPlugin: Plugin = async () => {
-  const activeSessions = new Set<string>()
+  const sessionStates = new Map<string, AgentState>()
+  const finishedSessions = new Set<string>()
   let heartbeat: ReturnType<typeof setInterval> | undefined
   let currentState: AgentState = AGENT_STATE.IDLE
 
@@ -90,18 +94,38 @@ export const TmuxAgentStatusPlugin: Plugin = async () => {
     heartbeat.unref()
   }
 
-  function markActive(sessionID: string): void {
-    activeSessions.add(sessionID)
-    updateStatus(AGENT_STATE.RUNNING)
+  function aggregateActiveState(): AgentState | undefined {
+    if ([...sessionStates.values()].includes(AGENT_STATE.BLOCKED)) return AGENT_STATE.BLOCKED
+    if (sessionStates.size > 0) return AGENT_STATE.RUNNING
+
+    return undefined
   }
 
-  function markDoneIfActive(sessionID: string): void {
-    if (!activeSessions.has(sessionID)) {
-      updateStatus(AGENT_STATE.IDLE)
+  function updateSession(sessionID: string, state: AgentState): void {
+    finishedSessions.delete(sessionID)
+    sessionStates.set(sessionID, state)
+    updateStatus(aggregateActiveState() ?? AGENT_STATE.IDLE)
+  }
+
+  function markActive(sessionID: string): void {
+    updateSession(sessionID, AGENT_STATE.RUNNING)
+  }
+
+  function markFinished(sessionID: string, publishDone: boolean): void {
+    if (publishDone && finishedSessions.has(sessionID)) return
+
+    const wasActive = sessionStates.delete(sessionID)
+    const activeState = aggregateActiveState()
+
+    if (publishDone) finishedSessions.add(sessionID)
+    else finishedSessions.delete(sessionID)
+
+    if (activeState) {
+      updateStatus(activeState)
       return
     }
 
-    updateStatus(AGENT_STATE.DONE)
+    updateStatus(wasActive && publishDone ? AGENT_STATE.DONE : AGENT_STATE.IDLE)
   }
 
   return {
@@ -113,8 +137,8 @@ export const TmuxAgentStatusPlugin: Plugin = async () => {
       markActive(input.sessionID)
     },
 
-    "permission.ask": async () => {
-      updateStatus(AGENT_STATE.BLOCKED)
+    "permission.ask": async (input) => {
+      updateSession(input.sessionID, AGENT_STATE.BLOCKED)
     },
 
     "tool.execute.before": async (input) => {
@@ -135,7 +159,8 @@ export const TmuxAgentStatusPlugin: Plugin = async () => {
         case "permission.v2.asked":
         case "question.asked":
         case "question.v2.asked":
-          updateStatus(AGENT_STATE.BLOCKED)
+          if (sessionID) updateSession(sessionID, AGENT_STATE.BLOCKED)
+          else updateStatus(AGENT_STATE.BLOCKED)
           return
 
         case "permission.replied":
@@ -150,16 +175,22 @@ export const TmuxAgentStatusPlugin: Plugin = async () => {
         case "session.error":
         case "session.next.step.failed":
         case "session.next.tool.failed":
+          if (sessionID) sessionStates.delete(sessionID)
+          if (sessionID) finishedSessions.delete(sessionID)
           updateStatus(AGENT_STATE.ERROR)
           return
 
         case "session.status":
-          if (payload.status?.type === "busy" && sessionID) markActive(sessionID)
-          if (payload.status?.type === "idle" && sessionID) markDoneIfActive(sessionID)
+          if ((payload.status?.type === "busy" || payload.status?.type === "retry") && sessionID) markActive(sessionID)
+          if (payload.status?.type === "idle" && sessionID) markFinished(sessionID, true)
           return
 
         case "session.idle":
-          if (sessionID) markDoneIfActive(sessionID)
+          if (sessionID) markFinished(sessionID, true)
+          return
+
+        case "session.deleted":
+          if (payload.info?.id) markFinished(payload.info.id, false)
           return
       }
     },

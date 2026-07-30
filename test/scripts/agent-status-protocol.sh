@@ -90,8 +90,10 @@ HOME=/Users/rafaba TMUX=/tmp/tmux-test TMUX_PANE= PATH="$ADAPTER_BIN:$PATH" bun 
   }
   const plugin = (await import(process.argv[1])).TmuxAgentStatusPlugin
   const hooks = await plugin({})
-  await hooks["chat.message"]({ sessionID: "one" })
-  await hooks["chat.message"]({ sessionID: "two" })
+  await hooks["chat.message"]({ sessionID: "root" })
+  await hooks.event({
+    event: { type: "session.status", properties: { sessionID: "child", status: { type: "busy" } } },
+  })
   if (intervalCount !== 1 || intervalMs !== 240000 || !timerUnrefed) {
     throw new Error("OpenCode heartbeat must be single, bounded, and unrefed")
   }
@@ -100,11 +102,23 @@ HOME=/Users/rafaba TMUX=/tmp/tmux-test TMUX_PANE= PATH="$ADAPTER_BIN:$PATH" bun 
   if (!heartbeatRecord.endsWith("\topencode\t1002\n")) {
     throw new Error("active OpenCode state was not refreshed")
   }
-  await hooks.event({ event: { type: "session.idle", properties: { sessionID: "two" } } })
+  await hooks.event({ event: { type: "session.idle", properties: { sessionID: "root" } } })
+  if (timerCleared) throw new Error("idle root stopped heartbeat while child session was busy")
+  const delegatedRecord = await Bun.file(process.argv[2]).text()
+  if (!delegatedRecord.includes("\trunning\t") || !delegatedRecord.endsWith("\topencode\t1003\n")) {
+    throw new Error("idle root overrode delegated child activity")
+  }
+  await hooks.event({ event: { type: "session.idle", properties: { sessionID: "child" } } })
   if (!timerCleared) throw new Error("terminal OpenCode state did not stop heartbeat")
   const terminalRecord = await Bun.file(process.argv[2]).text()
-  if (!terminalRecord.includes("\tdone\t") || !terminalRecord.endsWith("\topencode\t1003\n")) {
+  if (!terminalRecord.includes("\tdone\t") || !terminalRecord.endsWith("\topencode\t1004\n")) {
     throw new Error("terminal OpenCode state was not recorded")
+  }
+  await hooks.event({
+    event: { type: "session.status", properties: { sessionID: "child", status: { type: "idle" } } },
+  })
+  if (await Bun.file(process.argv[2]).text() !== terminalRecord) {
+    throw new Error("duplicate terminal OpenCode event erased done or advanced its event ID")
   }
   callback()
   if (await Bun.file(process.argv[2]).text() !== terminalRecord) {
@@ -114,7 +128,7 @@ HOME=/Users/rafaba TMUX=/tmp/tmux-test TMUX_PANE= PATH="$ADAPTER_BIN:$PATH" bun 
 IFS=$'\t' read -r _ adapter_state _ adapter_source adapter_event <"$XDG_CACHE_HOME/agent-status/panes/adapter-session__42"
 check done "$adapter_state" 'OpenCode terminal event supersedes older record'
 check opencode "$adapter_source" 'OpenCode protocol source'
-check 1003 "$adapter_event" 'OpenCode heartbeat keeps monotonic event IDs'
+check 1004 "$adapter_event" 'OpenCode heartbeat keeps monotonic event IDs'
 if [[ "${AGENT_STATUS_PROTOCOL_FOCUS:-}" == "opencode-heartbeat" ]]; then
   ((fail)) && exit 1
   printf 'OpenCode heartbeat protocol checks passed\n'
