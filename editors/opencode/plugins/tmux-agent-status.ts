@@ -5,6 +5,7 @@ import { join } from "node:path"
 import type { Hooks, Plugin } from "@opencode-ai/plugin"
 
 const AGENT_STATUS_SCRIPT = join(homedir(), ".dotfiles", "scripts", "agent-status.sh")
+const HEARTBEAT_INTERVAL_MS = 240_000
 let previousEventID = 0
 
 const AGENT_STATE = {
@@ -63,19 +64,44 @@ function eventType(event: unknown): string {
 
 export const TmuxAgentStatusPlugin: Plugin = async () => {
   const activeSessions = new Set<string>()
+  let heartbeat: ReturnType<typeof setInterval> | undefined
+  let currentState: AgentState = AGENT_STATE.IDLE
+
+  function stopHeartbeat(): void {
+    if (heartbeat === undefined) return
+
+    clearInterval(heartbeat)
+    heartbeat = undefined
+  }
+
+  function updateStatus(state: AgentState): void {
+    currentState = state
+    setStatus(state)
+
+    if (state !== AGENT_STATE.RUNNING && state !== AGENT_STATE.BLOCKED) {
+      stopHeartbeat()
+      return
+    }
+    if (heartbeat !== undefined) return
+
+    heartbeat = setInterval(() => {
+      if (currentState === AGENT_STATE.RUNNING || currentState === AGENT_STATE.BLOCKED) setStatus(currentState)
+    }, HEARTBEAT_INTERVAL_MS)
+    heartbeat.unref()
+  }
 
   function markActive(sessionID: string): void {
     activeSessions.add(sessionID)
-    setStatus(AGENT_STATE.RUNNING)
+    updateStatus(AGENT_STATE.RUNNING)
   }
 
   function markDoneIfActive(sessionID: string): void {
     if (!activeSessions.has(sessionID)) {
-      setStatus(AGENT_STATE.IDLE)
+      updateStatus(AGENT_STATE.IDLE)
       return
     }
 
-    setStatus(AGENT_STATE.DONE)
+    updateStatus(AGENT_STATE.DONE)
   }
 
   return {
@@ -88,7 +114,7 @@ export const TmuxAgentStatusPlugin: Plugin = async () => {
     },
 
     "permission.ask": async () => {
-      setStatus(AGENT_STATE.BLOCKED)
+      updateStatus(AGENT_STATE.BLOCKED)
     },
 
     "tool.execute.before": async (input) => {
@@ -109,7 +135,7 @@ export const TmuxAgentStatusPlugin: Plugin = async () => {
         case "permission.v2.asked":
         case "question.asked":
         case "question.v2.asked":
-          setStatus(AGENT_STATE.BLOCKED)
+          updateStatus(AGENT_STATE.BLOCKED)
           return
 
         case "permission.replied":
@@ -124,7 +150,7 @@ export const TmuxAgentStatusPlugin: Plugin = async () => {
         case "session.error":
         case "session.next.step.failed":
         case "session.next.tool.failed":
-          setStatus(AGENT_STATE.ERROR)
+          updateStatus(AGENT_STATE.ERROR)
           return
 
         case "session.status":
