@@ -145,6 +145,53 @@ IFS=$'\t' read -r _ claude_state _ claude_source _ <"$XDG_CACHE_HOME/agent-statu
 check running "$claude_state" 'Claude adapter records running state'
 check claude "$claude_source" 'Claude adapter records protocol source'
 
+# Codex legacy notify only reports turn completion. The adapter forwards the
+# unchanged payload to the existing notifier and records done without inventing
+# running or waiting lifecycle states.
+CODEX_NOTIFY_LOG="$TMP/codex-notify.log"
+CODEX_NOTIFY_STATE="$TMP/codex-notify-state"
+CODEX_SOUND_LOG="$TMP/codex-sound.log"
+cat >"$ADAPTER_BIN/afplay" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$1" >>"$CODEX_SOUND_LOG"
+EOF
+cat >"$ADAPTER_BIN/codex-notifier" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >"$CODEX_NOTIFY_LOG"
+cat "$CODEX_RECORD" >"$CODEX_NOTIFY_STATE"
+EOF
+cat >"$ADAPTER_BIN/failing-codex-notifier" <<'EOF'
+#!/usr/bin/env bash
+cat "$CODEX_RECORD" >"$CODEX_NOTIFY_STATE"
+exit 1
+EOF
+chmod +x "$ADAPTER_BIN/afplay" "$ADAPTER_BIN/codex-notifier" "$ADAPTER_BIN/failing-codex-notifier"
+cat >"$TMP/codex-sound.conf" <<'EOF'
+AGENT_STATUS_CONFIG_VERSION=1
+AGENT_STATUS_SOUND_ENABLED=1
+AGENT_STATUS_SOUND_STATES=(done)
+AGENT_STATUS_SOUND_COOLDOWN=30
+AGENT_STATUS_SOUND_BACKEND=afplay
+AGENT_STATUS_SOUND_FILE="/System/Library/Sounds/Hero.aiff"
+EOF
+codex_payload='{"type":"agent-turn-complete","thread-id":"thread-1","turn-id":"turn-1","cwd":"/tmp/project","client":"cli","input-messages":["test"],"last-assistant-message":"done"}'
+CODEX_RECORD="$XDG_CACHE_HOME/agent-status/panes/adapter-session__44" CODEX_NOTIFY_LOG="$CODEX_NOTIFY_LOG" CODEX_NOTIFY_STATE="$CODEX_NOTIFY_STATE" CODEX_SOUND_LOG="$CODEX_SOUND_LOG" AGENT_STATUS_CONFIG="$TMP/codex-sound.conf" TMUX=/tmp/tmux-test TMUX_PANE=%44 PATH="$ADAPTER_BIN:$PATH" \
+  "$ROOT/scripts/codex-agent-status.sh" "$ADAPTER_BIN/codex-notifier" turn-ended "$codex_payload"
+IFS=$'\t' read -r _ codex_state _ codex_source _ <"$XDG_CACHE_HOME/agent-status/panes/adapter-session__44"
+check done "$codex_state" 'Codex completion records done state'
+check codex "$codex_source" 'Codex adapter records protocol source'
+check "turn-ended $codex_payload" "$(cat "$CODEX_NOTIFY_LOG")" 'Codex adapter preserves existing notifier argv and payload'
+check "$(cat "$XDG_CACHE_HOME/agent-status/panes/adapter-session__44")" "$(cat "$CODEX_NOTIFY_STATE")" 'Codex records done before invoking notifier'
+invalid_codex_record="$(cat "$XDG_CACHE_HOME/agent-status/panes/adapter-session__44")"
+CODEX_RECORD="$XDG_CACHE_HOME/agent-status/panes/adapter-session__44" CODEX_NOTIFY_LOG="$CODEX_NOTIFY_LOG" CODEX_NOTIFY_STATE="$CODEX_NOTIFY_STATE" TMUX=/tmp/tmux-test TMUX_PANE=%44 PATH="$ADAPTER_BIN:$PATH" \
+  "$ROOT/scripts/codex-agent-status.sh" "$ADAPTER_BIN/codex-notifier" turn-ended '{"type":"unsupported"}'
+check "$invalid_codex_record" "$(cat "$XDG_CACHE_HOME/agent-status/panes/adapter-session__44")" 'Codex ignores unsupported notify events'
+CODEX_RECORD="$XDG_CACHE_HOME/agent-status/panes/adapter-session__44" CODEX_NOTIFY_STATE="$CODEX_NOTIFY_STATE" CODEX_SOUND_LOG="$CODEX_SOUND_LOG" AGENT_STATUS_CONFIG="$TMP/codex-sound.conf" TMUX=/tmp/tmux-test TMUX_PANE=%44 PATH="$ADAPTER_BIN:$PATH" \
+  "$ROOT/scripts/codex-agent-status.sh" "$ADAPTER_BIN/failing-codex-notifier" turn-ended "$codex_payload"
+check done "$("$SCRIPT" get adapter-session)" 'Codex notifier failure preserves done state'
+check "$(cat "$XDG_CACHE_HOME/agent-status/panes/adapter-session__44")" "$(cat "$CODEX_NOTIFY_STATE")" 'Codex stores state before failing notifier'
+check 1 "$(wc -l <"$CODEX_SOUND_LOG" | tr -d ' ')" 'Codex completion emits exactly one done sound during cooldown'
+
 # Configured sessions remain first and unknown sessions preserve source order.
 cat >"$TMP/order.conf" <<'EOF'
 AGENT_STATUS_CONFIG_VERSION=1
@@ -219,7 +266,12 @@ cat >"$PICKER_BIN/tmux" <<'EOF'
 printf '%s\n' "$*" >>"$PICKER_LOG"
 case "$1" in list-panes) printf 'alpha\t0\tmain\t%%8\tcmd;$(touch nope)\ttitle\t/tmp/a b\n' ;; display-popup) : ;; esac
 EOF
-chmod +x "$PICKER_BIN/fzf" "$PICKER_BIN/tmux"
+cat >"$PICKER_BIN/ps" <<'EOF'
+#!/usr/bin/env bash
+printf 'snapshot\n' >>"$PS_LOG"
+printf '%s\n' "${PS_SNAPSHOT:-}"
+EOF
+chmod +x "$PICKER_BIN/fzf" "$PICKER_BIN/tmux" "$PICKER_BIN/ps"
 { for n in $(seq 1 14); do printf 'alpha\t%s\twindow %s\t%%%s\tcmd-%s;$(touch nope)\ttitle\t/tmp/a b\tcmd-%s\n' "$n" "$n" "$n" "$n" "$n"; done; } >"$snapshot"
 PICKER_ARGS="$TMP/picker.args" PICKER_LOG="$PICKER_LOG" PICKER_ROWS="$PICKER_ROWS" PICKER_SELECTION=$'p\037%8' PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker.sh" alpha "$snapshot" >/dev/null 2>&1 || true
 check_contains '◆ ▾ alpha' "$(cat "$PICKER_LOG")" 'picker marks the active session hierarchy'
@@ -270,6 +322,37 @@ PICKER_ARGS="$TMP/picker.args" PICKER_LOG="$PICKER_LOG" PICKER_ROWS="$PICKER_ROW
 opencode_title_rows="$(cut -f2- "$PICKER_ROWS")"
 check_contains $'\033[38;2;125;174;163m●\033[0m opencode' "$opencode_title_rows" 'picker prioritizes OpenCode cache source over Claude Code title'
 [[ "$opencode_title_rows" != *'claude'* && "$opencode_title_rows" != *'2.1.220'* ]] || fail=1
+codex_snapshot="$TMP/codex-pane.tsv"
+"$SCRIPT" set done alpha %20 codex 1
+printf 'alpha\t1\tmain\t%%20\tzsh\tstale title\t/tmp/codex-project\tzsh\n' >"$codex_snapshot"
+: >"$PICKER_LOG"
+PICKER_ARGS="$TMP/picker.args" PICKER_LOG="$PICKER_LOG" PICKER_ROWS="$PICKER_ROWS" PICKER_SELECTION=$'p\037%20' PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker.sh" alpha "$codex_snapshot" >/dev/null 2>&1 || true
+check_contains $'\033[38;2;169;182;101m●\033[0m codex' "$(cut -f2- "$PICKER_ROWS")" 'picker identifies Codex from protocol source'
+codex_fallback_snapshot="$TMP/codex-fallback-pane.tsv"
+printf 'alpha\t1\tmain\t%%21\tzsh\tCodex CLI\t/tmp/codex-fallback\tzsh\n' >"$codex_fallback_snapshot"
+: >"$PICKER_LOG"
+PICKER_ARGS="$TMP/picker.args" PICKER_LOG="$PICKER_LOG" PICKER_ROWS="$PICKER_ROWS" PICKER_SELECTION=$'p\037%21' PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker.sh" alpha "$codex_fallback_snapshot" >/dev/null 2>&1 || true
+check_contains $'\033[38;2;146;131;116m●\033[0m codex' "$(cut -f2- "$PICKER_ROWS")" 'picker identifies Codex title without cache source'
+codex_node_snapshot="$TMP/codex-node-pane.tsv"
+printf 'alpha\t1\tmain\t%%22\tnode\tCode\t/tmp/project\t\t100\n' >"$codex_node_snapshot"
+: >"$PICKER_LOG"; PS_LOG="$TMP/ps.log"; : >"$PS_LOG"
+PS_SNAPSHOT=$'100 1 /bin/zsh -zsh\n101 100 /opt/homebrew/bin/node /opt/homebrew/lib/node_modules/@openai/codex/bin/codex.js' PS_LOG="$PS_LOG" PICKER_ARGS="$TMP/picker.args" PICKER_LOG="$PICKER_LOG" PICKER_ROWS="$PICKER_ROWS" PICKER_SELECTION=$'p\037%22' PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker.sh" alpha "$codex_node_snapshot" >/dev/null 2>&1 || true
+check_contains $'\033[38;2;146;131;116m●\033[0m codex' "$(cut -f2- "$PICKER_ROWS")" 'picker identifies Node-launched Codex descendant before protocol state'
+check 1 "$(wc -l <"$PS_LOG" | tr -d ' ')" 'picker uses one process snapshot per render'
+codex_false_positive_snapshot="$TMP/codex-false-positive-pane.tsv"
+printf 'alpha\t1\tmain\t%%23\tnode\tCode\t/tmp/codex-project\t\t200\n' >"$codex_false_positive_snapshot"
+: >"$PICKER_LOG"; : >"$PS_LOG"
+PS_SNAPSHOT=$'200 1 /bin/zsh -zsh\n201 200 /opt/homebrew/bin/node /tmp/codex-project/helper.js --message=codex' PS_LOG="$PS_LOG" PICKER_ARGS="$TMP/picker.args" PICKER_LOG="$PICKER_LOG" PICKER_ROWS="$PICKER_ROWS" PICKER_SELECTION=$'p\037%23' PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker.sh" alpha "$codex_false_positive_snapshot" >/dev/null 2>&1 || true
+check_contains $'\033[38;2;146;131;116m●\033[0m node' "$(cut -f2- "$PICKER_ROWS")" 'picker rejects arbitrary Codex path and text matches'
+codex_source_precedence_snapshot="$TMP/codex-source-precedence-pane.tsv"
+"$SCRIPT" set running alpha %24 opencode 2
+printf 'alpha\t1\tmain\t%%24\tnode\tCode\t/tmp/project\t\t300\n' >"$codex_source_precedence_snapshot"
+: >"$PICKER_LOG"
+PS_SNAPSHOT=$'300 1 /bin/zsh -zsh\n301 300 /opt/homebrew/bin/node /opt/homebrew/lib/node_modules/@openai/codex/bin/codex.js' PS_LOG="$PS_LOG" PICKER_ARGS="$TMP/picker.args" PICKER_LOG="$PICKER_LOG" PICKER_ROWS="$PICKER_ROWS" PICKER_SELECTION=$'p\037%24' PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker.sh" alpha "$codex_source_precedence_snapshot" >/dev/null 2>&1 || true
+check_contains $'\033[38;2;125;174;163m●\033[0m codex' "$(cut -f2- "$PICKER_ROWS")" 'picker rejects mismatched raw source for verified Codex identity'
+: >"$PICKER_LOG"
+PS_SNAPSHOT=$'300 1 /bin/zsh -zsh\n301 300 /opt/homebrew/bin/node /opt/homebrew/lib/node_modules/@openai/codex/bin/codex.js\n302 300 /opt/homebrew/bin/opencode opencode' PS_LOG="$PS_LOG" PICKER_ARGS="$TMP/picker.args" PICKER_LOG="$PICKER_LOG" PICKER_ROWS="$PICKER_ROWS" PICKER_SELECTION=$'p\037%24' PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker.sh" alpha "$codex_source_precedence_snapshot" >/dev/null 2>&1 || true
+check_contains $'\033[38;2;125;174;163m●\033[0m opencode' "$(cut -f2- "$PICKER_ROWS")" 'picker keeps verified live competing producer authoritative'
 tool_snapshot="$TMP/tool-panes.tsv"
 printf 'alpha\t0\topencode\t%%16\topencode\topencode\t/tmp/opencode-project\topencode\nalpha\t0\topencode\t%%17\tzsh\tzsh\t/tmp/zsh-project\tzsh\n' >"$tool_snapshot"
 : >"$PICKER_LOG"
@@ -286,6 +369,7 @@ check_contains 'ctrl-j:down,ctrl-k:up,j:down,k:up,/:change-prompt(  filter › )
 check_contains '  navigate › ' "$(cat "$TMP/picker.args")" 'session picker starts with navigation prompt'
 check_contains '--highlight-line' "$(cat "$TMP/picker.args")" 'session picker highlights the full focused row'
 check_contains 'switch-client -t beta' "$(cat "$PICKER_LOG")" 'session picker Enter behavior'
+check 2 "$(wc -l <"$legacy_snapshot" | tr -d ' ')" 'old picker snapshot remains readable'
 : >"$PICKER_LOG"
 PICKER_LOG="$PICKER_LOG" PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker-wrapper.sh" alpha /tmp >/dev/null || true
 popup_command="$(cat "$PICKER_LOG")"

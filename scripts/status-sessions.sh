@@ -102,7 +102,8 @@ render_session_tab() {
 }
 
 sessions=()
-snapshot="$(tmux list-panes -a -F $'#{session_name}\t#{window_index}\t#{window_name}\t#{pane_id}\t#{pane_current_command}\t#{pane_title}\t#{pane_current_path}' 2>/dev/null || true)"
+snapshot="$(tmux list-panes -a -F $'#{session_name}\t#{window_index}\t#{window_name}\t#{pane_id}\t#{pane_current_command}\t#{pane_title}\t#{pane_current_path}\t#{pane_start_command}\t#{pane_pid}' 2>/dev/null || true)"
+AGENT_STATUS_PANE_SNAPSHOT="$snapshot" "$ROOT/codex-status-refresh.sh" >/dev/null 2>&1 || true
 while IFS= read -r session; do
 	[[ -n "$session" ]] && sessions+=("$session")
 done < <(

@@ -15,9 +15,11 @@
     ~/.config/tmux: editors/tmux
     ~/.config/herdr/config.toml: editors/herdr/config.toml
     ~/.config/opencode/plugins/tmux-agent-status.ts: editors/opencode/plugins/tmux-agent-status.ts
+    ~/.codex/config.toml: editors/codex/config.toml
     ~/.config/lazygit/config.yml: editors/lazygit/config.yml
     ~/.config/starship.toml: shell/starship.toml
     ~/.claude/settings.json: editors/claude/settings.json
+    ~/.codex/agent-status-notify.sh: scripts/codex-agent-status.sh
     ~/.pi/agent/extensions/tmux-agent-status.ts: editors/pi/agent/extensions/tmux-agent-status.ts
     ~/.hammerspoon: editors/hammerspoon
     ~/.gitconfig: git/.gitconfig

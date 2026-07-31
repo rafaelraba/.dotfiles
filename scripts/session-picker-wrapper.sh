@@ -23,7 +23,7 @@ active_tool() {
     π*) printf 'pi' ;;
     *)
         case "$window_name" in
-        opencode | nvim | claude | pi) printf '%s' "$window_name" ;;
+        opencode | nvim | claude | codex | pi) printf '%s' "$window_name" ;;
         *) printf '%s' "$command" ;;
         esac
         ;;

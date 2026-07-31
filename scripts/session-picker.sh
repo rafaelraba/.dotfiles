@@ -28,25 +28,90 @@ active_tool() {
 	local pane_title="$3"
 	local start_command="${4:-}"
 	local source="${5:-}"
+	local codex_descendant="${6:-}"
 
 	case "$source" in
-	claude | opencode | nvim | pi) printf '%s' "$source" ;;
+	claude | codex | opencode | nvim | pi) printf '%s' "$source" ;;
 	*)
 		case "$pane_title" in
 		*π*) printf 'pi' ;;
 		*Claude\ Code*) printf 'claude' ;;
+		Codex | Codex\ CLI) printf 'codex' ;;
 		*)
 			case "$command:$start_command" in
 			*claude* | *Claude*) printf 'claude' ;;
+			codex:* | */codex:* | *:codex | *:/codex | *:codex\ * | *:/codex\ *) printf 'codex' ;;
 			opencode:* | *:opencode | *:opencode\ *) printf 'opencode' ;;
 			nvim:* | *:nvim | *:nvim\ *) printf 'nvim' ;;
 			pi:* | *:pi | *:pi\ *) printf 'pi' ;;
-			*) printf '%s' "$command" ;;
+			*) [[ "$codex_descendant" == 1 ]] && printf 'codex' || printf '%s' "$command" ;;
 			esac
 			;;
 		esac
 		;;
 	esac
+}
+
+codex_ancestor_pids() {
+	local process_snapshot="$1"
+
+	awk '
+		function basename(path, count, parts) {
+			count = split(path, parts, "/")
+			return parts[count]
+		}
+		$1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+$/ {
+			parent[$1] = $2
+			if (basename($3) == "codex") strong[$1] = 1
+			for (field = 4; field <= NF; field++) {
+				name = basename($field)
+				if (name == "codex" || name == "codex.js") strong[$1] = 1
+			}
+		}
+		END {
+			for (pid in strong) {
+				ancestor = pid
+				while (ancestor != "" && !codex[ancestor]) {
+					codex[ancestor] = 1
+					ancestor = parent[ancestor]
+				}
+			}
+			for (pid in codex) print pid
+		}
+	' <<<"$process_snapshot"
+}
+
+producer_ancestor_pids() {
+	local process_snapshot="$1"
+
+	awk '
+		function basename(path, count, parts) {
+			count = split(path, parts, "/")
+			return parts[count]
+		}
+		$1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+$/ {
+			parent[$1] = $2
+			for (field = 3; field <= NF; field++) {
+				name = basename($field)
+				if (name == "claude" || name == "opencode" || name == "pi") strong[name, $1] = 1
+			}
+		}
+		END {
+			for (key in strong) {
+				split(key, parts, SUBSEP)
+				source = parts[1]
+				ancestor = parts[2]
+				while (ancestor != "" && !live[source, ancestor]) {
+					live[source, ancestor] = 1
+					ancestor = parent[ancestor]
+				}
+			}
+			for (key in live) {
+				split(key, parts, SUBSEP)
+				print parts[1] "\t" parts[2]
+			}
+		}
+	' <<<"$process_snapshot"
 }
 
 picker_source() {
@@ -121,8 +186,14 @@ FZF_COLORS="${FZF_COLORS},spinner:${AMBER},info:${SUBTLE},query:${FG_ACTIVE},sep
 IFS=$'\t' read -r _ _ _ snapshot_pane _ < "${sessions_file:-/dev/null}" || true
 if [[ "$snapshot_pane" == %* ]]; then
 	picker_rows() {
-		local last_session='' session index window pane command title path start_command source tool state dot marker sep=$'\037'
-		while IFS=$'\t' read -r session index window pane command title path start_command; do
+		local last_session='' session index window pane command title path start_command pane_pid source tool state dot marker sep=$'\037'
+		local process_snapshot='' codex_pids='' producer_pids='' codex_descendant source_live
+		if cut -f9 "$sessions_file" | grep -qE '^[0-9]+$'; then
+			process_snapshot="$(ps -axo pid=,ppid=,comm=,args= 2>/dev/null || true)"
+			codex_pids="$(codex_ancestor_pids "$process_snapshot")"
+			producer_pids="$(producer_ancestor_pids "$process_snapshot")"
+		fi
+		while IFS=$'\034' read -r session index window pane command title path start_command pane_pid; do
 			[[ -n "$session" && "$pane" == %* ]] || continue
 			command="${command//$'\t'/ }"; title="${title//$'\t'/ }"; path="${path//$'\t'/ }"; start_command="${start_command//$'\t'/ }"
 			if [[ "$session" != "$last_session" ]]; then
@@ -131,11 +202,24 @@ if [[ "$snapshot_pane" == %* ]]; then
 				last_session="$session"
 			fi
 			source="$(picker_source "$session" "$pane")"
-			tool="$(active_tool "$window" "$command" "$title" "$start_command" "$source")"
+			codex_descendant=0
+			if [[ "$pane_pid" =~ ^[0-9]+$ ]]; then
+				case $'\n'"$codex_pids"$'\n' in
+				*$'\n'"$pane_pid"$'\n'*) codex_descendant=1 ;;
+				esac
+			fi
+			source_live=0
+			case $'\n'"$producer_pids"$'\n' in
+			*$'\n'"$source"$'\t'"$pane_pid"$'\n'*) source_live=1 ;;
+			esac
+			if [[ "$codex_descendant" == 1 && "$source_live" == 0 ]]; then
+				case "$source" in claude | opencode | pi) source='' ;; esac
+			fi
+			tool="$(active_tool "$window" "$command" "$title" "$start_command" "$source" "$codex_descendant")"
 			state="$(pane_state "$session" "$pane")"
 			dot="$(state_dot "$state")"
 			printf 'p%s%s\t  └─ %s %s\t%s\n' "$sep" "$pane" "$dot" "$tool" "$path"
-		done < <(agent_status_order_session_rows < "$sessions_file")
+		done < <(agent_status_order_session_rows < "$sessions_file" | tr '\t' '\034')
 	}
 	selected="$({ picker_rows || true; } | fzf --ansi --highlight-line --layout=reverse --no-border --delimiter=$'\t' --with-nth=2 --prompt='  navigate › ' --header="$FZF_PICKER_HEADER" --pointer='❯ ' --cycle --bind="$FZF_MODAL_BIND" --preview='printf "  %s\\n" {3}' --preview-window='down,1,wrap,border-top' --no-info --no-sort --color="${FZF_COLORS}")" || exit 0
 	target="${selected%%$'\t'*}"

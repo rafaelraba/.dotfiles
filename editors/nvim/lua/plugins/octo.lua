@@ -54,4 +54,45 @@ return {
       icons = true,
     },
   },
+  config = function(_, opts)
+    local octo = require("octo")
+    local uri = require("octo.uri")
+    local utils = require("octo.utils")
+
+    octo.setup(opts)
+
+    -- Octo's GraphQL callback can run after its target buffer was closed.
+    -- Keep this workaround until upstream validates bufnr before nvim_buf_call().
+    octo.load_buffer = function(load_opts)
+      load_opts = load_opts or {}
+      local bufnr = load_opts.bufnr or vim.api.nvim_get_current_buf()
+      local cursor_pos = vim.api.nvim_win_get_cursor(0)
+      local buffer_info = uri.parse(vim.fn.bufname(bufnr))
+
+      if buffer_info == nil then
+        utils.print_err("Cannot parse buffer name: " .. vim.fn.bufname(bufnr))
+        return
+      end
+
+      octo.load(buffer_info.repo, buffer_info.kind, buffer_info.id, buffer_info.hostname, function(obj)
+        if not vim.api.nvim_buf_is_valid(bufnr) then
+          return
+        end
+
+        vim.api.nvim_buf_call(bufnr, function()
+          octo.create_buffer(buffer_info.kind, obj, buffer_info.repo, false, buffer_info.hostname)
+
+          local lines = vim.api.nvim_buf_line_count(bufnr)
+          vim.api.nvim_win_set_cursor(0, {
+            math.min(cursor_pos[1], lines),
+            math.max(0, cursor_pos[2] - 1),
+          })
+
+          if load_opts.verbose then
+            utils.info(string.format("Loaded %s/%s/%d", buffer_info.repo, buffer_info.kind, buffer_info.id))
+          end
+        end)
+      end)
+    end
+  end,
 }

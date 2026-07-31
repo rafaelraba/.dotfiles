@@ -119,7 +119,7 @@ herdr --version
 
 ## AI agent status restore
 
-Tmux shows shared agent state for Pi, OpenCode, and Claude Code using the same protocol: `running`, `blocked`, `done`, `idle`, and `error`.
+Tmux shows shared agent state for Pi, OpenCode, Claude Code, and Codex. Pi, OpenCode, and Claude Code report lifecycle states through the shared protocol. Codex combines its completion notifier with conservative classification of only the current bottom screen lines: verified activity is `running`, visible approval or question UI needs attention, and process presence alone remains `idle`.
 
 Important restore files:
 
@@ -131,14 +131,19 @@ Important restore files:
 | `editors/opencode/plugins/tmux-agent-status.ts` | `~/.config/opencode/plugins/tmux-agent-status.ts` |
 | `editors/claude/settings.json` | `~/.claude/settings.json`, including Claude Code hooks for tmux status. |
 | `scripts/claude-agent-status.sh` | Claude Code hook adapter for tmux status. |
+| `editors/codex/config.toml` | `~/.codex/config.toml`, including the completion notifier. |
+| `scripts/codex-agent-status.sh` | Codex completion adapter; preserves the existing desktop notifier. |
+| `scripts/codex-status-refresh.sh` | Bounded Codex screen classifier used by the tmux status refresh. |
 
-After restore, restart tmux, Claude Code, and OpenCode.
+After restore, restart tmux, Claude Code, OpenCode, and Codex.
 
 Quick verification:
 
 ```bash
 test -L ~/.claude/settings.json
 test -L ~/.config/opencode/plugins/tmux-agent-status.ts
+test -L ~/.codex/config.toml
+test -L ~/.codex/agent-status-notify.sh
 ```
 
 Visual defaults:
@@ -178,8 +183,8 @@ Current workspace model:
 - [ ] `nvim` opens without plugin errors.
 - [ ] `marksman` is attached to Markdown buffers (`:LspInfo`) and `<leader>mp` opens a browser preview.
 - [ ] `tmux` starts and the prefix is `Ctrl+a`.
-- [ ] Claude Code and OpenCode restart with tmux agent status hooks/plugins loaded.
-- [ ] `~/.claude/settings.json` and `~/.config/opencode/plugins/tmux-agent-status.ts` are symlinks into `~/.dotfiles`.
+- [ ] Claude Code, OpenCode, and Codex restart with tmux agent status integrations loaded.
+- [ ] `~/.claude/settings.json`, `~/.config/opencode/plugins/tmux-agent-status.ts`, and `~/.codex/config.toml` are symlinks into `~/.dotfiles`.
 - [ ] `lazygit` opens.
 - [ ] `ghostty` uses a Nerd Font.
 - [ ] Raycast window-management shortcuts respond.
