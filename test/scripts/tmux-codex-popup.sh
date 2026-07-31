@@ -119,7 +119,9 @@ check_contains 'switch-client -t =project-3' "$(cat "$TMP/new.log")" 'popup swit
 
 : >"$TMP/new.log"
 TMUX_LOG="$TMP/new.log" COLLISIONS='project' PATH="$BIN:$PATH" "$ROOT/scripts/tmux-new-session.sh" /tmp/project /dev/ttys001
-check_contains 'display-popup -t /dev/ttys001 -d /tmp/project -w 54 -h 5' "$(cat "$TMP/new.log")" 'collision fast path opens the workspace popup for the invoking client'
+check_contains 'display-popup -t /dev/ttys001 -d /tmp/project -w 54 -h 4 -b rounded' "$(cat "$TMP/new.log")" 'collision fast path opens a compact rounded workspace popup for the invoking client'
+check_contains '-S fg=#504945' "$(cat "$TMP/new.log")" 'workspace popup uses a subtle gray border'
+[[ "$(cat "$TMP/new.log")" != *' -T '* ]] || fail=1
 [[ "$(cat "$TMP/new.log")" != *'new-session -d'* ]] || fail=1
 
 : >"$TMP/fzf.count"; : >"$TMP/new.log"

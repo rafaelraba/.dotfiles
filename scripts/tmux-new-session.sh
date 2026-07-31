@@ -8,7 +8,7 @@ dir_name="$(basename "$pane_path")"
 dir_name="${dir_name#.}"
 
 if tmux has-session -t "=$dir_name" 2>/dev/null || tmux has-session -t "=_$dir_name" 2>/dev/null; then
-  tmux display-popup -t "$client_tty" -d "$pane_path" -w 54 -h 5 -b rounded -s "bg=#1d2021,fg=#d4be98" -S "fg=#d79921" -T " workspace " -E "$popup_script"
+  tmux display-popup -t "$client_tty" -d "$pane_path" -w 54 -h 4 -b rounded -s "bg=#1d2021,fg=#d4be98" -S "fg=#504945" -E "$popup_script"
   exit 0
 fi
 

@@ -33,10 +33,8 @@ validate_name() {
 name="$(default_name)"
 error=''
 while true; do
-  header='Enter creates and switches  |  Esc cancels'
-  [[ -z "$error" ]] || header="$error\n$header"
   selection="$(printf '\n' | fzf --height=100% --layout=reverse --disabled --no-border --no-info --no-separator --no-scrollbar --pointer='' --margin=0,1 \
-    --print-query --query="$name" --prompt='Workspace name: ' --header="$header" \
+    --print-query --query="$name" --prompt='Workspace name: ' --header="$error" \
     --color='bg:#1d2021,fg:#d4be98,bg+:#1d2021,fg+:#1d2021,header:#ea6962,prompt:#d79921,pointer:#1d2021,query:#d4be98' \
     --bind='enter:accept,esc:abort' 2>/dev/null)" || exit 0
   name="${selection%%$'\n'*}"

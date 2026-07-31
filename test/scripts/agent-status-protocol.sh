@@ -283,7 +283,7 @@ printf '%s\n' "${PS_SNAPSHOT:-}"
 EOF
 chmod +x "$PICKER_BIN/fzf" "$PICKER_BIN/tmux" "$PICKER_BIN/ps"
 { for n in $(seq 1 14); do printf 'alpha\t%s\twindow %s\t%%%s\tcmd-%s;$(touch nope)\ttitle\t/tmp/a b\tcmd-%s\n' "$n" "$n" "$n" "$n" "$n"; done; } >"$snapshot"
-PICKER_ARGS="$TMP/picker.args" PICKER_LOG="$PICKER_LOG" PICKER_ROWS="$PICKER_ROWS" PICKER_SELECTION=$'p\037%8' PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker.sh" alpha "$snapshot" >/dev/null 2>&1 || true
+PICKER_ARGS="$TMP/picker.args" PICKER_LOG="$PICKER_LOG" PICKER_ROWS="$PICKER_ROWS" PICKER_SELECTION=$'p\037%8' PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker.sh" alpha "$snapshot" 1 >/dev/null 2>&1 || true
 check_contains '◆ ▾ alpha' "$(cat "$PICKER_LOG")" 'picker marks the active session hierarchy'
 check_contains 'cmd-14;$(touch nope)' "$(cat "$PICKER_LOG")" 'picker keeps special command inert'
 check_contains 'switch-client -t %8' "$(cat "$PICKER_LOG")" 'picker switches selected pane'
@@ -302,6 +302,9 @@ check_contains '  navigate › ' "$(cat "$TMP/picker.args")" 'hierarchy picker s
 check_contains 'Enter switch · j/k or ↑/↓ move · Ctrl-j/k navigate · / search · Esc close' "$(cat "$TMP/picker.args")" 'picker navigation-first help'
 check_contains '--ansi' "$(cat "$TMP/picker.args")" 'hierarchy picker renders ANSI state dots'
 check_contains '--highlight-line' "$(cat "$TMP/picker.args")" 'hierarchy picker highlights the full focused row'
+check_contains '--border=rounded' "$(cat "$TMP/picker.args")" 'hierarchy picker owns the complete rounded border'
+check_contains '--border-label= workspace · 1 sessions ' "$(cat "$TMP/picker.args")" 'hierarchy picker preserves the popup title on its border'
+[[ "$(cat "$TMP/picker.args")" != *'--no-border'* ]] || fail=1
 check_contains 'bg+:#d79921' "$(cat "$TMP/picker.args")" 'hierarchy picker uses Herdr amber selection background'
 check_contains 'fg+:#282828' "$(cat "$TMP/picker.args")" 'hierarchy picker uses dark selected foreground without ANSI overrides'
 check_contains 'printf "  %s\\n" {3}' "$(cat "$TMP/picker.args")" 'picker preview uses full path field'
@@ -373,18 +376,21 @@ check_contains $'\033[38;2;146;131;116m●\033[0m zsh' "$tool_rows" 'picker keep
 legacy_snapshot="$TMP/sessions.tsv"
 printf 'alpha\t1\t1\t/tmp/a b\topencode\tbash\ttitle\nbeta\t1\t0\t/tmp/b\tnvim\tnvim\ttitle\n' >"$legacy_snapshot"
 : >"$PICKER_LOG"
-PICKER_ARGS="$TMP/picker.args" PICKER_LOG="$PICKER_LOG" PICKER_ROWS="$PICKER_ROWS" PICKER_SELECTION=beta PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker.sh" alpha "$legacy_snapshot" >/dev/null 2>&1 || true
+PICKER_ARGS="$TMP/picker.args" PICKER_LOG="$PICKER_LOG" PICKER_ROWS="$PICKER_ROWS" PICKER_SELECTION=beta PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker.sh" alpha "$legacy_snapshot" 2 >/dev/null 2>&1 || true
 check_contains 'start:pos(2)' "$(cat "$TMP/picker.args")" 'session picker keeps initial position binding'
 check_contains 'ctrl-j:down,ctrl-k:up,j:down,k:up,/:change-prompt(  filter › )+unbind(j,k,/)' "$(cat "$TMP/picker.args")" 'session picker starts in navigation mode and slash enables input'
 check_contains '  navigate › ' "$(cat "$TMP/picker.args")" 'session picker starts with navigation prompt'
 check_contains '--highlight-line' "$(cat "$TMP/picker.args")" 'session picker highlights the full focused row'
+check_contains '--border=rounded' "$(cat "$TMP/picker.args")" 'session picker owns the complete rounded border'
+check_contains '--border-label= workspace · 2 sessions ' "$(cat "$TMP/picker.args")" 'session picker preserves the popup title on its border'
+[[ "$(cat "$TMP/picker.args")" != *'--no-border'* ]] || fail=1
 check_contains 'switch-client -t beta' "$(cat "$PICKER_LOG")" 'session picker Enter behavior'
 check 2 "$(wc -l <"$legacy_snapshot" | tr -d ' ')" 'old picker snapshot remains readable'
 : >"$PICKER_LOG"
 PICKER_LOG="$PICKER_LOG" PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker-wrapper.sh" alpha /tmp >/dev/null || true
 popup_command="$(cat "$PICKER_LOG")"
-check_contains 'display-popup -d /tmp -w 90% -h 80% -b rounded' "$popup_command" 'picker popup percentage sizing with rounded border'
-check_contains '-S fg=#d79921' "$popup_command" 'picker popup border uses Herdr amber'
+check_contains 'display-popup -d /tmp -w 90% -h 80% -B' "$popup_command" 'picker popup keeps percentage sizing without a tmux border'
+[[ "$popup_command" != *' -b '* && "$popup_command" != *' -S '* && "$popup_command" != *' -T '* ]] || fail=1
 check 1 "$(grep -c '^list-panes -a' "$PICKER_LOG" || true)" 'picker opens with one bulk snapshot'
 
 # Sound is opt-in, synchronous for deterministic tests, and deduplicated by

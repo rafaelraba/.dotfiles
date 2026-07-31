@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Compact session picker using the Gruvbox Material dark hard palette.
-# Usage: ~/.dotfiles/scripts/session-picker.sh [current_session] [sessions_file]
+# Usage: ~/.dotfiles/scripts/session-picker.sh [current_session] [sessions_file] [session_count]
 #
 #   current_session : nombre de la sesión actual (opcional, se detecta automáticamente)
 #   sessions_file   : archivo con output pre-capturado de `tmux list-sessions`
@@ -13,6 +13,7 @@ set -euo pipefail
 
 current="${1:-$(tmux display-message -p '#S' 2>/dev/null || true)}"
 sessions_file="${2:-}"
+session_count="${3:-}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=agent-status/config.sh
 source "$ROOT/agent-status/config.sh"
@@ -221,7 +222,7 @@ if [[ "$snapshot_pane" == %* ]]; then
 			printf 'p%s%s\t  └─ %s %s\t%s\n' "$sep" "$pane" "$dot" "$tool" "$path"
 		done < <(agent_status_order_session_rows < "$sessions_file" | tr '\t' '\034')
 	}
-	selected="$({ picker_rows || true; } | fzf --ansi --highlight-line --layout=reverse --no-border --delimiter=$'\t' --with-nth=2 --prompt='  navigate › ' --header="$FZF_PICKER_HEADER" --pointer='❯ ' --cycle --bind="$FZF_MODAL_BIND" --preview='printf "  %s\\n" {3}' --preview-window='down,1,wrap,border-top' --no-info --no-sort --color="${FZF_COLORS}")" || exit 0
+	selected="$({ picker_rows || true; } | fzf --ansi --highlight-line --layout=reverse --border=rounded --border-label=" workspace · $session_count sessions " --delimiter=$'\t' --with-nth=2 --prompt='  navigate › ' --header="$FZF_PICKER_HEADER" --pointer='❯ ' --cycle --bind="$FZF_MODAL_BIND" --preview='printf "  %s\\n" {3}' --preview-window='down,1,wrap,border-top' --no-info --no-sort --color="${FZF_COLORS}")" || exit 0
 	target="${selected%%$'\t'*}"
 	type="${target%%$'\037'*}"; payload="${target#*$'\037'}"
 	case "$type" in
@@ -369,7 +370,8 @@ selected="$({ session_rows || true; } |
 		--ansi \
 		--highlight-line \
 		--layout=reverse \
-		--no-border \
+		--border=rounded \
+		--border-label=" workspace · $session_count sessions " \
 		--delimiter=$'\t' \
 		--with-nth=2 \
 		--prompt='  navigate › ' \

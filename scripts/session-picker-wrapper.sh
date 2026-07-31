@@ -91,14 +91,12 @@ fi
 
 SESSION_COUNT=$(cut -f1 "$SPFILE" | sort -u | wc -l | tr -d ' ')
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-printf -v picker_command '%q %q %q; rm -f -- %q' "$ROOT/session-picker.sh" "$CURRENT" "$SPFILE" "$SPFILE"
+printf -v picker_command '%q %q %q %q; rm -f -- %q' "$ROOT/session-picker.sh" "$CURRENT" "$SPFILE" "$SESSION_COUNT" "$SPFILE"
 
 # Abrir el popup con los datos pre-capturados.
 # session-picker.sh lee de $SPFILE y lo borra al terminar.
 exec tmux display-popup \
     -d "$PANEDIR" \
-    -w 90% -h 80% -b rounded \
+    -w 90% -h 80% -B \
     -s "bg=#1d2021,fg=#d4be98" \
-    -S "fg=#d79921" \
-    -T " workspace · $SESSION_COUNT sessions " \
     -E "$picker_command"
