@@ -282,9 +282,10 @@ printf 'snapshot\n' >>"$PS_LOG"
 printf '%s\n' "${PS_SNAPSHOT:-}"
 EOF
 chmod +x "$PICKER_BIN/fzf" "$PICKER_BIN/tmux" "$PICKER_BIN/ps"
-{ for n in $(seq 1 14); do printf 'alpha\t%s\twindow %s\t%%%s\tcmd-%s;$(touch nope)\ttitle\t/tmp/a b\tcmd-%s\n' "$n" "$n" "$n" "$n" "$n"; done; } >"$snapshot"
+{ for n in $(seq 1 14); do printf 'alpha\t%s\twindow %s\t%%%s\tcmd-%s;$(touch nope)\ttitle\t/tmp/a b\tcmd-%s\n' "$n" "$n" "$n" "$n" "$n"; done; printf '_popup\t1\tshell\t%%99\tzsh\tpopup\t/tmp\tzsh\n'; } >"$snapshot"
 PICKER_ARGS="$TMP/picker.args" PICKER_LOG="$PICKER_LOG" PICKER_ROWS="$PICKER_ROWS" PICKER_SELECTION=$'p\037%8' PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker.sh" alpha "$snapshot" 1 >/dev/null 2>&1 || true
 check_contains '◆ ▾ alpha' "$(cat "$PICKER_LOG")" 'picker marks the active session hierarchy'
+[[ "$(cat "$PICKER_ROWS")" != *'_popup'* ]] || { printf 'FAIL: hierarchy picker includes internal session\n' >&2; fail=1; }
 check_contains 'cmd-14;$(touch nope)' "$(cat "$PICKER_LOG")" 'picker keeps special command inert'
 check_contains 'switch-client -t %8' "$(cat "$PICKER_LOG")" 'picker switches selected pane'
 visible_rows="$(cut -f2- "$PICKER_ROWS")"
@@ -374,7 +375,7 @@ tool_rows="$(cut -f2- "$PICKER_ROWS")"
 check_contains $'\033[38;2;146;131;116m●\033[0m opencode' "$tool_rows" 'picker identifies genuine OpenCode pane'
 check_contains $'\033[38;2;146;131;116m●\033[0m zsh' "$tool_rows" 'picker keeps zsh pane distinct from opencode window'
 legacy_snapshot="$TMP/sessions.tsv"
-printf 'alpha\t1\t1\t/tmp/a b\topencode\tbash\ttitle\nbeta\t1\t0\t/tmp/b\tnvim\tnvim\ttitle\n' >"$legacy_snapshot"
+printf 'alpha\t1\t1\t/tmp/a b\topencode\tbash\ttitle\n_popup\t1\t1\t/tmp/internal\tzsh\tzsh\tpopup\nbeta\t1\t0\t/tmp/b\tnvim\tnvim\ttitle\n' >"$legacy_snapshot"
 : >"$PICKER_LOG"
 PICKER_ARGS="$TMP/picker.args" PICKER_LOG="$PICKER_LOG" PICKER_ROWS="$PICKER_ROWS" PICKER_SELECTION=beta PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker.sh" alpha "$legacy_snapshot" 2 >/dev/null 2>&1 || true
 check_contains 'start:pos(2)' "$(cat "$TMP/picker.args")" 'session picker keeps initial position binding'
@@ -385,7 +386,8 @@ check_contains '--border=rounded' "$(cat "$TMP/picker.args")" 'session picker ow
 check_contains '--border-label= workspace · 2 sessions ' "$(cat "$TMP/picker.args")" 'session picker preserves the popup title on its border'
 [[ "$(cat "$TMP/picker.args")" != *'--no-border'* ]] || fail=1
 check_contains 'switch-client -t beta' "$(cat "$PICKER_LOG")" 'session picker Enter behavior'
-check 2 "$(wc -l <"$legacy_snapshot" | tr -d ' ')" 'old picker snapshot remains readable'
+[[ "$(cat "$PICKER_ROWS")" != *'_popup'* ]] || { printf 'FAIL: legacy picker includes internal session\n' >&2; fail=1; }
+check 3 "$(wc -l <"$legacy_snapshot" | tr -d ' ')" 'old picker snapshot remains readable'
 : >"$PICKER_LOG"
 PICKER_LOG="$PICKER_LOG" PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker-wrapper.sh" alpha /tmp >/dev/null || true
 popup_command="$(cat "$PICKER_LOG")"

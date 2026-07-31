@@ -28,7 +28,15 @@ cat >"$BIN/tmux" <<'EOF'
 printf '%s\n' "$*" >>"$TMUX_LOG"
 case "$1" in
   has-session)
-    case "${3:-}" in =project|=_project|=project-2|=_project-2) [[ "${COLLISIONS:-}" == *"${3#=}"* ]] ;; *) exit 1 ;; esac
+    [[ " ${COLLISIONS:-} " == *" ${3#=} "* ]]
+    ;;
+  list-sessions) printf '10 alpha\n20 beta\n' ;;
+  display-message)
+    if [[ "$*" == *"-t ${TMUX_PANE:-} #S"* ]]; then
+      printf '%s\n' "${CURRENT_SESSION:-alpha}"
+    else
+      printf 'alpha\n'
+    fi
     ;;
   capture-pane) printf '%s\n' "${SCREEN:-}" ;;
 esac
@@ -107,6 +115,29 @@ TMUX_LOG="$TMP/new.log" COLLISIONS='' PATH="$BIN:$PATH" "$ROOT/scripts/tmux-new-
 check_contains 'new-session -d -s project -c /tmp/project' "$(cat "$TMP/new.log")" 'free basename fast path creates directly'
 check_contains 'switch-client -t =project' "$(cat "$TMP/new.log")" 'free basename switches client'
 
+: >"$TMP/new.log"
+(cd "$popup_path" && TMUX_LOG="$TMP/new.log" COLLISIONS='' PATH="$BIN:$PATH" "$ROOT/scripts/tmux-internal-session.sh" _scratch)
+check_contains "new-session -d -s _scratch -c $popup_path" "$(cat "$TMP/new.log")" 'new floating session inherits popup cwd'
+check_contains 'set-option -t _scratch status off' "$(cat "$TMP/new.log")" 'new floating session disables its complete status bar'
+check_contains 'set-option -t _scratch detach-on-destroy on' "$(cat "$TMP/new.log")" 'new floating session detaches cleanly on destroy'
+check_contains 'attach-session -t _scratch' "$(cat "$TMP/new.log")" 'new floating session attaches after configuration'
+
+: >"$TMP/new.log"
+TMUX_LOG="$TMP/new.log" COLLISIONS='_popup' PATH="$BIN:$PATH" "$ROOT/scripts/tmux-internal-session.sh" _popup
+[[ "$(cat "$TMP/new.log")" != *'new-session'* ]] || { printf 'FAIL: existing floating session must not be recreated\n' >&2; fail=1; }
+check_contains 'set-option -t _popup status off' "$(cat "$TMP/new.log")" 'existing floating session disables its complete status bar before attach'
+check_contains 'attach-session -t _popup' "$(cat "$TMP/new.log")" 'existing floating session attaches after configuration'
+
+: >"$TMP/new.log"
+TMUX_PANE='%2' CURRENT_SESSION=beta TMUX_LOG="$TMP/new.log" PATH="$BIN:$PATH" "$ROOT/scripts/tmux-switch-session.sh" prev
+check_contains 'display-message -p -t %2 #S' "$(cat "$TMP/new.log")" 'previous navigation resolves the invoking pane session'
+check_contains 'switch-client -t alpha' "$(cat "$TMP/new.log")" 'previous navigation returns from beta to alpha'
+check_contains '#{?#{m:_*,#{session_name}},0,1}' "$(cat "$TMP/new.log")" 'navigation excludes internal sessions at the tmux query'
+
+: >"$TMP/new.log"
+TMUX_PANE='%1' CURRENT_SESSION=alpha TMUX_LOG="$TMP/new.log" PATH="$BIN:$PATH" "$ROOT/scripts/tmux-switch-session.sh" next
+check_contains 'switch-client -t beta' "$(cat "$TMP/new.log")" 'next navigation advances from alpha to beta'
+
 : >"$TMP/new.log"; : >"$TMP/fzf.count"
 (cd "$popup_path" && FZF_COUNT="$TMP/fzf.count" FZF_LOG="$TMP/fzf.log" \
   FZF_RESPONSE_1='project-3' TMUX_LOG="$TMP/new.log" COLLISIONS='project project-2' PATH="$BIN:$PATH" \
@@ -155,6 +186,14 @@ check_contains 'switch-client -t =visible-name' "$(cat "$TMP/new.log")" 'workspa
   "$ROOT/scripts/tmux-new-session-popup.sh")
 [[ "$(cat "$TMP/new.log")" != *'new-session'* ]] || fail=1
 check_contains "#{m:_*,#{session_name}}" "$(grep 'bind S' "$ROOT/editors/tmux/tmux.conf")" 'underscore sessions keep detach behavior'
+check_contains 'tmux-internal-session.sh --configure #{q:session_name}' "$(grep -A 4 '^set-hook -g session-created' "$ROOT/editors/tmux/tmux.conf")" 'floating session creation hook applies internal options'
+check_contains 'set-hook -g client-attached' "$(cat "$ROOT/editors/tmux/tmux.conf")" 'attaching to an existing floating session reapplies internal options'
+check_contains 'set-hook -g client-session-changed' "$(cat "$ROOT/editors/tmux/tmux.conf")" 'switching into an existing floating session reapplies internal options'
+check_contains "tmux-internal-session.sh --configure-existing" "$(cat "$ROOT/editors/tmux/tmux.conf")" 'config reload repairs existing floating sessions'
+check_contains "bind w choose-tree -Zw -f '#{?#{m:_*,#{session_name}},0,1}'" "$(cat "$ROOT/editors/tmux/tmux.conf")" 'native session tree excludes floating sessions'
+check_contains "bind D choose-client -Z -f '#{?#{m:_*,#{session_name}},0,1}'" "$(cat "$ROOT/editors/tmux/tmux.conf")" 'native client picker excludes clients in floating sessions'
+check_contains "bind '(' run-shell '~/.dotfiles/scripts/tmux-switch-session.sh prev'" "$(cat "$ROOT/editors/tmux/tmux.conf")" 'native previous-session key uses filtered navigation'
+check_contains "bind ')' run-shell '~/.dotfiles/scripts/tmux-switch-session.sh next'" "$(cat "$ROOT/editors/tmux/tmux.conf")" 'native next-session key uses filtered navigation'
 popup_binding="$(grep -A 6 '^bind S' "$ROOT/editors/tmux/tmux.conf")"
 check_contains "run-shell '~/.dotfiles/scripts/tmux-new-session.sh #{q:pane_current_path} #{q:client_tty}'" "$popup_binding" 'fast path expands shell-quoted path and client formats'
 [[ "$popup_binding" != *"if-shell '~/.dotfiles/scripts/tmux-new-session.sh"* ]] || { printf 'FAIL: if-shell passes tmux formats literally to the fast path\n' >&2; fail=1; }

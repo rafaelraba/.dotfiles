@@ -80,7 +80,8 @@ calculate_popup_width() {
 SPFILE=$(mktemp /tmp/tmux-sp-XXXXXX)
 
 # Capture exactly one render-local pane snapshot before opening the popup.
-"$(dirname "${BASH_SOURCE[0]}")/agent-status.sh" snapshot > "$SPFILE"
+"$(dirname "${BASH_SOURCE[0]}")/agent-status.sh" snapshot |
+    awk -F '\t' '$1 !~ /^_/' > "$SPFILE"
 
 # Si el archivo quedó vacío, algo falló — mostrar error mínimo y salir
 if [[ ! -s "$SPFILE" ]]; then

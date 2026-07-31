@@ -25,7 +25,11 @@ if ((${#sessions[@]} <= 1)); then
   exit 0
 fi
 
-current="$(tmux display-message -p '#S')"
+if [[ -n "${TMUX_PANE:-}" ]]; then
+  current="$(tmux display-message -p -t "$TMUX_PANE" '#S')"
+else
+  current="$(tmux display-message -p '#S')"
+fi
 current_idx=-1
 for i in "${!sessions[@]}"; do
   if [[ "${sessions[$i]}" == "$current" ]]; then

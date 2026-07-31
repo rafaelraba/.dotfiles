@@ -196,6 +196,7 @@ if [[ "$snapshot_pane" == %* ]]; then
 		fi
 		while IFS=$'\034' read -r session index window pane command title path start_command pane_pid; do
 			[[ -n "$session" && "$pane" == %* ]] || continue
+			[[ "$session" == _* ]] && continue
 			command="${command//$'\t'/ }"; title="${title//$'\t'/ }"; path="${path//$'\t'/ }"; start_command="${start_command//$'\t'/ }"
 			if [[ "$session" != "$last_session" ]]; then
 				marker='  '; [[ "$session" == "$current" ]] && marker='◆ '
@@ -244,7 +245,7 @@ initial_selection_position() {
 
 	if [[ -n "${sessions_file:-}" && -r "$sessions_file" ]]; then
 		while IFS=$'\t' read -r name _; do
-			[[ -n "$name" ]] && names+=("$name")
+			[[ -n "$name" && "$name" != _* ]] && names+=("$name")
 		done < <(agent_status_order_session_rows < "$sessions_file")
 	else
 		while IFS= read -r name; do
@@ -285,6 +286,7 @@ session_rows() {
 	if [[ -n "${sessions_file:-}" && -r "$sessions_file" ]]; then
 		while IFS=$'\t' read -r name _ _ path window_name command pane_title; do
 			[[ -n "$name" ]] || continue
+			[[ "$name" == _* ]] && continue
 			if [[ "$name" == "$current" ]]; then
 				current_index=${#names[@]}
 			fi
