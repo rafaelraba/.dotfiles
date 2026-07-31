@@ -6,6 +6,8 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 BIN="$TMP/bin"
 mkdir -p "$BIN" "$TMP/cache/agent-status/panes"
+popup_path="$TMP/project"
+mkdir -p "$popup_path"
 fail=0
 
 check() {
@@ -41,6 +43,7 @@ count=0; [[ -f "$FZF_COUNT" ]] && read -r count <"$FZF_COUNT"
 count=$((count + 1)); printf '%s\n' "$count" >"$FZF_COUNT"
 eval "response=\${FZF_RESPONSE_$count-}"; eval "status=\${FZF_STATUS_$count-0}"
 printf '%s\n' "$*" >>"$FZF_LOG"
+printf 'stdin-bytes=%s\n' "$(wc -c </dev/stdin | tr -d ' ')" >>"$FZF_LOG"
 [[ "$status" == 0 ]] || exit "$status"
 printf '%s\n' "$response"
 EOF
@@ -102,39 +105,57 @@ check 1 "$(test -e "$record"; printf '%s' "$?")" 'Codex cache clears when proces
 
 TMUX_LOG="$TMP/new.log" COLLISIONS='' PATH="$BIN:$PATH" "$ROOT/scripts/tmux-new-session.sh" /tmp/project
 check_contains 'new-session -d -s project -c /tmp/project' "$(cat "$TMP/new.log")" 'free basename fast path creates directly'
-check_contains 'switch-client -t project' "$(cat "$TMP/new.log")" 'free basename switches client'
+check_contains 'switch-client -t =project' "$(cat "$TMP/new.log")" 'free basename switches client'
 
 : >"$TMP/new.log"; : >"$TMP/fzf.count"
-FZF_COUNT="$TMP/fzf.count" FZF_LOG="$TMP/fzf.log" FZF_RESPONSE_1='project-3' TMUX_LOG="$TMP/new.log" COLLISIONS='project project-2' PATH="$BIN:$PATH" \
-  "$ROOT/scripts/tmux-new-session-popup.sh" /tmp/project
+(cd "$popup_path" && FZF_COUNT="$TMP/fzf.count" FZF_LOG="$TMP/fzf.log" \
+  FZF_RESPONSE_1='project-3' TMUX_LOG="$TMP/new.log" COLLISIONS='project project-2' PATH="$BIN:$PATH" \
+  "$ROOT/scripts/tmux-new-session-popup.sh")
 check_contains '--query=project-3' "$(cat "$TMP/fzf.log")" 'collision popup pre-fills first free suffix'
-check_contains 'new-session -d -s project-3 -c /tmp/project' "$(cat "$TMP/new.log")" 'popup creates validated session'
+check_contains 'stdin-bytes=1' "$(cat "$TMP/fzf.log")" 'popup feeds fzf exactly one empty candidate'
+check_contains '--disabled' "$(cat "$TMP/fzf.log")" 'popup keeps its inert candidate selectable while typing'
+check_contains "new-session -d -s project-3 -c $popup_path" "$(cat "$TMP/new.log")" 'popup creates validated session'
 check_contains 'switch-client -t =project-3' "$(cat "$TMP/new.log")" 'popup switches invoking client'
+
+: >"$TMP/new.log"
+TMUX_LOG="$TMP/new.log" COLLISIONS='project' PATH="$BIN:$PATH" "$ROOT/scripts/tmux-new-session.sh" /tmp/project /dev/ttys001
+check_contains 'display-popup -t /dev/ttys001 -d /tmp/project -w 54 -h 5' "$(cat "$TMP/new.log")" 'collision fast path opens the workspace popup for the invoking client'
+[[ "$(cat "$TMP/new.log")" != *'new-session -d'* ]] || fail=1
 
 : >"$TMP/fzf.count"; : >"$TMP/new.log"
 special_path="$TMP/path with \"double quotes\" and 'single quotes';\$(touch TMUX_POPUP_INJECTED)"
 mkdir -p "$special_path"
-(cd "$TMP" && TMUX_NEW_SESSION_PANE_PATH="$special_path" FZF_COUNT="$TMP/fzf.count" FZF_LOG="$TMP/fzf.log" \
+(cd "$special_path" && FZF_COUNT="$TMP/fzf.count" FZF_LOG="$TMP/fzf.log" \
   FZF_RESPONSE_1='safe-name' TMUX_LOG="$TMP/new.log" COLLISIONS='' PATH="$BIN:$PATH" \
   "$ROOT/scripts/tmux-new-session-popup.sh")
-check_contains "new-session -d -s safe-name -c $special_path" "$(cat "$TMP/new.log")" 'popup environment preserves arbitrary cwd characters'
-check 1 "$(test -e "$TMP/TMUX_POPUP_INJECTED"; printf '%s' "$?")" 'popup cwd transport does not execute shell syntax'
+check_contains "new-session -d -s safe-name -c $special_path" "$(cat "$TMP/new.log")" 'popup derives arbitrary cwd characters from its working directory'
+check 1 "$(test -e "$TMP/TMUX_POPUP_INJECTED"; printf '%s' "$?")" 'popup cwd does not execute shell syntax'
 
 : >"$TMP/fzf.count"; : >"$TMP/fzf.log"; : >"$TMP/new.log"
-FZF_COUNT="$TMP/fzf.count" FZF_LOG="$TMP/fzf.log" FZF_RESPONSE_1='bad.name' FZF_RESPONSE_2='valid-name' TMUX_LOG="$TMP/new.log" COLLISIONS='project' PATH="$BIN:$PATH" \
-  "$ROOT/scripts/tmux-new-session-popup.sh" /tmp/project
+(cd "$popup_path" && FZF_COUNT="$TMP/fzf.count" FZF_LOG="$TMP/fzf.log" \
+  FZF_RESPONSE_1='bad.name' FZF_RESPONSE_2='valid-name' TMUX_LOG="$TMP/new.log" COLLISIONS='project' PATH="$BIN:$PATH" \
+  "$ROOT/scripts/tmux-new-session-popup.sh")
 check 2 "$(cat "$TMP/fzf.count")" 'invalid name keeps popup loop open'
 check_contains 'Use letters, numbers, underscores, or hyphens.' "$(cat "$TMP/fzf.log")" 'validation error remains inline'
 
+: >"$TMP/fzf.count"; : >"$TMP/fzf.log"; : >"$TMP/new.log"
+(cd "$popup_path" && FZF_COUNT="$TMP/fzf.count" FZF_LOG="$TMP/fzf.log" \
+  FZF_RESPONSE_1='_hidden' FZF_RESPONSE_2='visible-name' TMUX_LOG="$TMP/new.log" COLLISIONS='project' PATH="$BIN:$PATH" \
+  "$ROOT/scripts/tmux-new-session-popup.sh")
+check 2 "$(cat "$TMP/fzf.count")" 'reserved popup name keeps the workspace dialog open'
+check_contains 'reserved for popups' "$(cat "$TMP/fzf.log")" 'workspace popup rejects hidden session names'
+check_contains "new-session -d -s visible-name -c $popup_path" "$(cat "$TMP/new.log")" 'workspace creates a visible normal session'
+check_contains 'switch-client -t =visible-name' "$(cat "$TMP/new.log")" 'workspace switches to the created normal session'
+
 : >"$TMP/fzf.count"; : >"$TMP/new.log"
-FZF_COUNT="$TMP/fzf.count" FZF_LOG="$TMP/fzf.log" FZF_STATUS_1=130 TMUX_LOG="$TMP/new.log" COLLISIONS='project' PATH="$BIN:$PATH" \
-  "$ROOT/scripts/tmux-new-session-popup.sh" /tmp/project
+(cd "$popup_path" && FZF_COUNT="$TMP/fzf.count" FZF_LOG="$TMP/fzf.log" \
+  FZF_STATUS_1=130 TMUX_LOG="$TMP/new.log" COLLISIONS='project' PATH="$BIN:$PATH" \
+  "$ROOT/scripts/tmux-new-session-popup.sh")
 [[ "$(cat "$TMP/new.log")" != *'new-session'* ]] || fail=1
 check_contains "#{m:_*,#{session_name}}" "$(grep 'bind S' "$ROOT/editors/tmux/tmux.conf")" 'underscore sessions keep detach behavior'
 popup_binding="$(grep -A 6 '^bind S' "$ROOT/editors/tmux/tmux.conf")"
-check_contains 'display-popup' "$popup_binding" 'collision uses popup rather than command prompt'
-check_contains '-e "TMUX_NEW_SESSION_PANE_PATH=#{pane_current_path}"' "$popup_binding" 'popup transports cwd through tmux environment'
-[[ "$popup_binding" != *'tmux-new-session-popup.sh "#{pane_current_path}"'* ]] || { printf 'FAIL: popup command interpolates cwd into shell code\n' >&2; fail=1; }
+check_contains "run-shell '~/.dotfiles/scripts/tmux-new-session.sh #{q:pane_current_path} #{q:client_tty}'" "$popup_binding" 'fast path expands shell-quoted path and client formats'
+[[ "$popup_binding" != *"if-shell '~/.dotfiles/scripts/tmux-new-session.sh"* ]] || { printf 'FAIL: if-shell passes tmux formats literally to the fast path\n' >&2; fail=1; }
 
 ((fail == 0)) || exit 1
 printf 'tmux Codex and session popup checks passed\n'

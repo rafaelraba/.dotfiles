@@ -58,47 +58,38 @@ status_bg() {
 	local state="$1"
 
 	case "$state" in
-		running) printf '#8aadf4' ;;
-		permission) printf '#eed49f' ;;
-		waiting_for_input) printf '#f5a97f' ;;
-		blocked) printf '#eed49f' ;;
-		done) printf '#a6da95' ;;
-		error) printf '#ed8796' ;;
-		*) printf '#3b4261' ;;
-	esac
-}
-
-status_dot() {
-	local state="$1"
-	local color
-	color="$(status_bg "$state")"
-
-	case "$1" in
-		idle) printf '#[fg=#3b4261]●' ;;
-		*) printf '#[fg=%s]●' "$color" ;;
+		running) printf '%s' "${AGENT_STATUS_PALETTE_RUNNING:-#8aadf4}" ;;
+		permission) printf '%s' "${AGENT_STATUS_PALETTE_PERMISSION:-#eed49f}" ;;
+		waiting_for_input) printf '%s' "${AGENT_STATUS_PALETTE_WAITING_FOR_INPUT:-#f5a97f}" ;;
+		blocked) printf '%s' "${AGENT_STATUS_PALETTE_BLOCKED:-#c6a0f6}" ;;
+		done) printf '%s' "${AGENT_STATUS_PALETTE_DONE:-#a6da95}" ;;
+		error) printf '%s' "${AGENT_STATUS_PALETTE_ERROR:-#ed8796}" ;;
+		# Idle tabs use a fixed identity accent, separate from lifecycle palettes.
+		*) printf '#6c8f91' ;;
 	esac
 }
 
 render_session_tab() {
 	local session="$1"
 	local is_current="$2"
-	local display_name state dot symbol summary
+	local tab_number="$3"
+	local display_name state color symbol summary
 	summary="$(session_status "$session")"
 	state="$summary"
 	if [[ -n "${NO_COLOR:-}${AGENT_STATUS_NO_COLOR:-}" ]]; then
 		case "$state" in error) symbol='!' ;; permission) symbol='?' ;; waiting_for_input) symbol='…' ;; blocked) symbol='#' ;; done) symbol='✓' ;; running) symbol='›' ;; *) symbol='·' ;; esac
-		printf ' [%s %s] ' "$symbol" "$session"
+		printf ' [%s %s %s] ' "$symbol" "$session" "$tab_number"
 		return
 	fi
-	dot="$(status_dot "$state")"
+	color="$(status_bg "$state")"
 
 	if [ "$is_current" = "true" ]; then
-		echo -n " #[bg=$bar_bg,fg=#363a4f]#[bg=#363a4f,fg=#ffffff,bold] $dot#[fg=#ffffff] $session #[bg=$bar_bg,fg=#363a4f]"
+		echo -n " #[bg=$bar_bg,fg=#363a4f]#[bg=#363a4f,fg=#ffffff,bold] $session #[bg=$color,fg=#0b0f1a,bold] $tab_number #[bg=$bar_bg,fg=$color]"
 		return
 	fi
 
 	display_name="$(compact_session_name "$session")"
-	echo -n " #[bg=$bar_bg,fg=#1f2438]#[bg=#1f2438,fg=#ffffff,bold] $dot#[fg=#ffffff] $display_name #[bg=$bar_bg,fg=#1f2438]"
+	echo -n " #[bg=$bar_bg,fg=#1f2438]#[bg=#1f2438,fg=#ffffff,bold] $display_name #[bg=$color,fg=#0b0f1a,bold] $tab_number #[bg=$bar_bg,fg=$color]"
 }
 
 sessions=()
@@ -123,9 +114,16 @@ for i in "${!sessions[@]}"; do
 done
 
 visible_sessions=0
-for session in "${sessions[@]}"; do
+for i in "${!sessions[@]}"; do
 	((visible_sessions < max_visible_sessions)) || break
-	[[ "$session" == "$current" ]] && render_session_tab "$session" true || render_session_tab "$session" false
+	# Reserve the final slot for an off-screen current session without reordering
+	# the earlier non-current sessions.
+	if [ "$i" -eq $((max_visible_sessions - 1)) ] && [ "$current_index" -ge "$max_visible_sessions" ]; then
+		i="$current_index"
+	fi
+	session="${sessions[$i]}"
+	tab_number=$((i + 1))
+	[[ "$session" == "$current" ]] && render_session_tab "$session" true "$tab_number" || render_session_tab "$session" false "$tab_number"
 	((++visible_sessions))
 done
 

@@ -217,7 +217,7 @@ check $'state=blocked\tblocked=1\tdone=1' "$("$SCRIPT" summary mixed)" 'aggregat
 check '? permission' "$(AGENT_STATUS_CONFIG="$TMP/order.conf" bash -c 'source "$1"; printf "%s %s" "$(agent_status_state_symbol permission)" "$(agent_status_state_label permission)"' _ "$ORDER")" 'permission no-color marker'
 check '… input' "$(AGENT_STATUS_CONFIG="$TMP/order.conf" bash -c 'source "$1"; printf "%s %s" "$(agent_status_state_symbol waiting_for_input)" "$(agent_status_state_label waiting_for_input)"' _ "$ORDER")" 'input no-color marker'
 
-# Rendering uses one bulk pane snapshot and tabs deliberately carry no detail.
+# Rendering uses one bulk pane snapshot and tabs carry only name, state color, and position.
 FAKE_BIN="$TMP/bin"
 TMUX_LOG="$TMP/tmux.log"
 mkdir -p "$FAKE_BIN"
@@ -225,7 +225,7 @@ cat >"$FAKE_BIN/tmux" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$TMUX_LOG"
 case "$1" in
-  list-sessions) printf '20\t$3\tnewest\n10\t$2\tmiddle\n10\t$1\toldest\n' ;;
+  list-sessions) printf '30\t$4\tlatest\n20\t$3\tnewest\n10\t$2\tmiddle\n10\t$1\toldest\n' ;;
   list-panes) printf 'oldest\t0\tmain\t%%7\tbash\tmain\t/tmp\tbash\noldest\t1\tcode\t%%8\tclaude\tcode\t/tmp\tclaude\nmiddle\t0\twork\t%%13\tvim\twork\t/tmp\tvim\n' ;;
 esac
 EOF
@@ -238,14 +238,24 @@ render_tab() {
 "$SCRIPT" set done oldest %7 adapter 1
 single_tab="$(render_tab oldest)"
 check_contains 'oldest' "$single_tab" 'tab includes session name'
-[[ "$single_tab" != *'done'* && "$single_tab" != *'running'* && "$single_tab" != *'1 '* ]] || fail=1
+[[ "$single_tab" != *'done'* && "$single_tab" != *'running'* ]] || fail=1
 check 1 "$(grep -c '^list-panes -a' "$TMUX_LOG" || true)" 'one bulk pane snapshot per status render'
 other_tab="$(render_tab middle)"
 [[ "$single_tab" == *'oldest'*'middle'*'newest'* && "$other_tab" == *'oldest'*'middle'*'newest'* ]] || fail=1
-check_contains '#[fg=#a6da95]●#[fg=#ffffff] oldest' "$single_tab" 'active point resets to white label'
-check_contains '#[fg=#3b4261]●#[fg=#ffffff] middle' "$single_tab" 'inactive point resets to white label'
-[[ "$single_tab" != *'#[fg=#a6da95]● oldest'* && "$single_tab" != *'#[fg=#3b4261]● middle'* ]] || fail=1
-check_contains '[✓ oldest]' "$(NO_COLOR=1 render_tab oldest)" 'no-color tab keeps distinct marker'
+check_contains '#[bg=#a6da95,fg=#0b0f1a,bold] 1 ' "$single_tab" 'active tab appends state-colored first position'
+check_contains '#[bg=#6c8f91,fg=#0b0f1a,bold] 2 ' "$single_tab" 'idle tab uses its distinct stable-position badge color'
+check_contains '#[bg=#363a4f,fg=#ffffff,bold] oldest ' "$single_tab" 'current tab keeps distinct dark name segment'
+check_contains '[✓ oldest 1]' "$(NO_COLOR=1 render_tab oldest)" 'no-color tab keeps distinct marker and position'
+
+# A newly created current session beyond capacity replaces only the final slot.
+newest_current="$(render_tab latest)"
+check_contains 'oldest' "$newest_current" 'newest current keeps first ordered session visible'
+check_contains 'middle' "$newest_current" 'newest current keeps second ordered session visible'
+[[ "$newest_current" != *'newest'* ]] || fail=1
+check_contains '#[bg=#363a4f,fg=#ffffff,bold] latest ' "$newest_current" 'newest current session remains a full visible tab'
+check_contains '#[bg=#6c8f91,fg=#0b0f1a,bold] 4 ' "$newest_current" 'idle newest current tab retains its distinct badge color and ordered number'
+check_contains '+1' "$newest_current" 'overflow counts only the omitted session'
+check_contains '[· latest 4]' "$(NO_COLOR=1 render_tab latest)" 'no-color newest current tab retains its number'
 
 # Timing instrumentation records every render for deterministic budget coverage.
 TIMING_FILE="$TMP/render-ms"
