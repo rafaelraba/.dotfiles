@@ -46,17 +46,7 @@ cat >"$BIN/ps" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "${PS_SNAPSHOT:-}"
 EOF
-cat >"$BIN/fzf" <<'EOF'
-#!/usr/bin/env bash
-count=0; [[ -f "$FZF_COUNT" ]] && read -r count <"$FZF_COUNT"
-count=$((count + 1)); printf '%s\n' "$count" >"$FZF_COUNT"
-eval "response=\${FZF_RESPONSE_$count-}"; eval "status=\${FZF_STATUS_$count-0}"
-printf '%s\n' "$*" >>"$FZF_LOG"
-printf 'stdin-bytes=%s\n' "$(wc -c </dev/stdin | tr -d ' ')" >>"$FZF_LOG"
-[[ "$status" == 0 ]] || exit "$status"
-printf '%s\n' "$response"
-EOF
-chmod +x "$BIN/tmux" "$BIN/ps" "$BIN/fzf"
+chmod +x "$BIN/tmux" "$BIN/ps"
 
 run_refresh() {
   local screen="$1" process="$2" snapshot="$3"
@@ -138,52 +128,56 @@ check_contains '#{?#{m:_*,#{session_name}},0,1}' "$(cat "$TMP/new.log")" 'naviga
 TMUX_LOG="$TMP/new.log" PATH="$BIN:$PATH" "$ROOT/scripts/tmux-switch-session.sh" next /dev/ttys001 alpha
 check_contains 'switch-client -c /dev/ttys001 -t beta' "$(cat "$TMP/new.log")" 'next navigation targets the invoking client from alpha to beta'
 
-: >"$TMP/new.log"; : >"$TMP/fzf.count"
-(cd "$popup_path" && FZF_COUNT="$TMP/fzf.count" FZF_LOG="$TMP/fzf.log" \
-  FZF_RESPONSE_1='project-3' TMUX_LOG="$TMP/new.log" COLLISIONS='project project-2' PATH="$BIN:$PATH" \
-  "$ROOT/scripts/tmux-new-session-popup.sh" /dev/ttys001)
-check_contains '--query=project-3' "$(cat "$TMP/fzf.log")" 'collision popup pre-fills first free suffix'
-check_contains 'stdin-bytes=1' "$(cat "$TMP/fzf.log")" 'popup feeds fzf exactly one empty candidate'
-check_contains '--disabled' "$(cat "$TMP/fzf.log")" 'popup keeps its inert candidate selectable while typing'
+: >"$TMP/new.log"; : >"$TMP/popup.out"
+printf '\025project-3\n' | (cd "$popup_path" && TMUX_LOG="$TMP/new.log" COLLISIONS='project project-2' PATH="$BIN:$PATH" \
+  "$ROOT/scripts/tmux-new-session-popup.sh" /dev/ttys001) >"$TMP/popup.out" 2>&1
 check_contains "new-session -d -s project-3 -c $popup_path" "$(cat "$TMP/new.log")" 'popup creates validated session'
 check_contains 'switch-client -c /dev/ttys001 -t =project-3' "$(cat "$TMP/new.log")" 'popup switches invoking client'
+check_contains "Workspace name:" "$(cat "$ROOT/scripts/tmux-new-session-popup.sh")" 'popup renders the workspace prompt'
+check_contains '\033[38;5;179mWorkspace name:' "$(cat "$ROOT/scripts/tmux-new-session-popup.sh")" 'workspace prompt uses an accent color'
+if grep -Eq 'fzf|read -r -e|compgen' "$ROOT/scripts/tmux-new-session-popup.sh"; then
+  printf 'FAIL: workspace popup must not use a completion or selector UI\n' >&2
+  fail=1
+fi
 
 : >"$TMP/new.log"
 TMUX_LOG="$TMP/new.log" COLLISIONS='project' PATH="$BIN:$PATH" "$ROOT/scripts/tmux-new-session.sh" /tmp/project /dev/ttys001 %7 80 24
-check_contains 'new-pane -P -F #{pane_id} -f -c /tmp/project -x 56 -y 6 -X 12 -Y 9' "$(cat "$TMP/new.log")" 'collision path opens a compact native workspace float'
+check_contains 'new-pane -P -F #{pane_id} -f -c /tmp/project -x 56 -y 1 -X 12 -Y 11' "$(cat "$TMP/new.log")" 'collision path opens a one-line native workspace float'
 check_contains '-S fg=#7aa2f7 -R fg=#7aa2f7 -t %7' "$(cat "$TMP/new.log")" 'workspace float uses explicit blue pane borders'
 [[ "$(cat "$TMP/new.log")" != *'new-session -d'* ]] || fail=1
 
-: >"$TMP/fzf.count"; : >"$TMP/new.log"
+: >"$TMP/new.log"
 special_path="$TMP/path with \"double quotes\" and 'single quotes';\$(touch TMUX_POPUP_INJECTED)"
 mkdir -p "$special_path"
-(cd "$special_path" && FZF_COUNT="$TMP/fzf.count" FZF_LOG="$TMP/fzf.log" \
-  FZF_RESPONSE_1='safe-name' TMUX_LOG="$TMP/new.log" COLLISIONS='' PATH="$BIN:$PATH" \
-  "$ROOT/scripts/tmux-new-session-popup.sh")
+printf '\025safe-name\n' | (cd "$special_path" && TMUX_LOG="$TMP/new.log" COLLISIONS='' PATH="$BIN:$PATH" \
+  "$ROOT/scripts/tmux-new-session-popup.sh") >"$TMP/popup.out" 2>&1
 check_contains "new-session -d -s safe-name -c $special_path" "$(cat "$TMP/new.log")" 'popup derives arbitrary cwd characters from its working directory'
 check 1 "$(test -e "$TMP/TMUX_POPUP_INJECTED"; printf '%s' "$?")" 'popup cwd does not execute shell syntax'
 
-: >"$TMP/fzf.count"; : >"$TMP/fzf.log"; : >"$TMP/new.log"
-(cd "$popup_path" && FZF_COUNT="$TMP/fzf.count" FZF_LOG="$TMP/fzf.log" \
-  FZF_RESPONSE_1='bad.name' FZF_RESPONSE_2='valid-name' TMUX_LOG="$TMP/new.log" COLLISIONS='project' PATH="$BIN:$PATH" \
-  "$ROOT/scripts/tmux-new-session-popup.sh")
-check 2 "$(cat "$TMP/fzf.count")" 'invalid name keeps popup loop open'
-check_contains 'Use letters, numbers, underscores, or hyphens.' "$(cat "$TMP/fzf.log")" 'validation error remains inline'
+: >"$TMP/popup.out"; : >"$TMP/new.log"
+printf '\025bad.name\n\025valid-name\n' | (cd "$popup_path" && TMUX_LOG="$TMP/new.log" COLLISIONS='project' PATH="$BIN:$PATH" \
+  "$ROOT/scripts/tmux-new-session-popup.sh") >"$TMP/popup.out" 2>&1
+check_contains 'Use letters, numbers, underscores, or hyphens.' "$(cat "$TMP/popup.out")" 'validation error remains inline'
 
-: >"$TMP/fzf.count"; : >"$TMP/fzf.log"; : >"$TMP/new.log"
-(cd "$popup_path" && FZF_COUNT="$TMP/fzf.count" FZF_LOG="$TMP/fzf.log" \
-  FZF_RESPONSE_1='_hidden' FZF_RESPONSE_2='visible-name' TMUX_LOG="$TMP/new.log" COLLISIONS='project' PATH="$BIN:$PATH" \
-  "$ROOT/scripts/tmux-new-session-popup.sh")
-check 2 "$(cat "$TMP/fzf.count")" 'reserved popup name keeps the workspace dialog open'
-check_contains 'reserved for popups' "$(cat "$TMP/fzf.log")" 'workspace popup rejects hidden session names'
+: >"$TMP/popup.out"; : >"$TMP/new.log"
+printf '\025_hidden\n\025visible-name\n' | (cd "$popup_path" && TMUX_LOG="$TMP/new.log" COLLISIONS='project' PATH="$BIN:$PATH" \
+  "$ROOT/scripts/tmux-new-session-popup.sh") >"$TMP/popup.out" 2>&1
+check_contains 'reserved for popups' "$(cat "$TMP/popup.out")" 'workspace popup rejects hidden session names'
 check_contains "new-session -d -s visible-name -c $popup_path" "$(cat "$TMP/new.log")" 'workspace creates a visible normal session'
 check_contains 'switch-client -t =visible-name' "$(cat "$TMP/new.log")" 'workspace switches to the created normal session'
 
-: >"$TMP/fzf.count"; : >"$TMP/new.log"
-(cd "$popup_path" && FZF_COUNT="$TMP/fzf.count" FZF_LOG="$TMP/fzf.log" \
-  FZF_STATUS_1=130 TMUX_LOG="$TMP/new.log" COLLISIONS='project' PATH="$BIN:$PATH" \
-  "$ROOT/scripts/tmux-new-session-popup.sh")
+: >"$TMP/new.log"
+printf '' | (cd "$popup_path" && TMUX_LOG="$TMP/new.log" COLLISIONS='project' PATH="$BIN:$PATH" \
+  "$ROOT/scripts/tmux-new-session-popup.sh") >"$TMP/popup.out" 2>&1 || true
 [[ "$(cat "$TMP/new.log")" != *'new-session'* ]] || fail=1
+
+: >"$TMP/new.log"
+printf '\033' | (cd "$popup_path" && TMUX_LOG="$TMP/new.log" COLLISIONS='project' PATH="$BIN:$PATH" \
+  "$ROOT/scripts/tmux-new-session-popup.sh" /dev/ttys001) >"$TMP/popup.out" 2>&1 || true
+[[ "$(cat "$TMP/new.log")" != *'new-session'* && "$(cat "$TMP/new.log")" != *'switch-client'* ]] || {
+  printf 'FAIL: Escape must cancel without workspace or client changes\n' >&2
+  fail=1
+}
 check_contains "#{m:_*,#{session_name}}" "$(grep 'bind S' "$ROOT/editors/tmux/tmux.conf")" 'underscore sessions keep detach behavior'
 check_contains 'tmux-internal-session.sh --configure #{q:session_name}' "$(grep -A 4 '^set-hook -g session-created' "$ROOT/editors/tmux/tmux.conf")" 'floating session creation hook applies internal options'
 check_contains 'set-hook -g client-attached' "$(cat "$ROOT/editors/tmux/tmux.conf")" 'attaching to an existing floating session reapplies internal options'
