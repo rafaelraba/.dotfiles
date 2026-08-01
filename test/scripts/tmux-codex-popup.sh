@@ -39,6 +39,7 @@ case "$1" in
     fi
     ;;
   capture-pane) printf '%s\n' "${SCREEN:-}" ;;
+  new-pane) printf '%%50\n' ;;
 esac
 EOF
 cat >"$BIN/ps" <<'EOF'
@@ -129,30 +130,28 @@ check_contains 'set-option -t _popup status off' "$(cat "$TMP/new.log")" 'existi
 check_contains 'attach-session -t _popup' "$(cat "$TMP/new.log")" 'existing floating session attaches after configuration'
 
 : >"$TMP/new.log"
-TMUX_PANE='%2' CURRENT_SESSION=beta TMUX_LOG="$TMP/new.log" PATH="$BIN:$PATH" "$ROOT/scripts/tmux-switch-session.sh" prev
-check_contains 'display-message -p -t %2 #S' "$(cat "$TMP/new.log")" 'previous navigation resolves the invoking pane session'
-check_contains 'switch-client -t alpha' "$(cat "$TMP/new.log")" 'previous navigation returns from beta to alpha'
+TMUX_LOG="$TMP/new.log" PATH="$BIN:$PATH" "$ROOT/scripts/tmux-switch-session.sh" prev /dev/ttys001 beta
+check_contains 'switch-client -c /dev/ttys001 -t alpha' "$(cat "$TMP/new.log")" 'previous navigation targets the invoking client from beta to alpha'
 check_contains '#{?#{m:_*,#{session_name}},0,1}' "$(cat "$TMP/new.log")" 'navigation excludes internal sessions at the tmux query'
 
 : >"$TMP/new.log"
-TMUX_PANE='%1' CURRENT_SESSION=alpha TMUX_LOG="$TMP/new.log" PATH="$BIN:$PATH" "$ROOT/scripts/tmux-switch-session.sh" next
-check_contains 'switch-client -t beta' "$(cat "$TMP/new.log")" 'next navigation advances from alpha to beta'
+TMUX_LOG="$TMP/new.log" PATH="$BIN:$PATH" "$ROOT/scripts/tmux-switch-session.sh" next /dev/ttys001 alpha
+check_contains 'switch-client -c /dev/ttys001 -t beta' "$(cat "$TMP/new.log")" 'next navigation targets the invoking client from alpha to beta'
 
 : >"$TMP/new.log"; : >"$TMP/fzf.count"
 (cd "$popup_path" && FZF_COUNT="$TMP/fzf.count" FZF_LOG="$TMP/fzf.log" \
   FZF_RESPONSE_1='project-3' TMUX_LOG="$TMP/new.log" COLLISIONS='project project-2' PATH="$BIN:$PATH" \
-  "$ROOT/scripts/tmux-new-session-popup.sh")
+  "$ROOT/scripts/tmux-new-session-popup.sh" /dev/ttys001)
 check_contains '--query=project-3' "$(cat "$TMP/fzf.log")" 'collision popup pre-fills first free suffix'
 check_contains 'stdin-bytes=1' "$(cat "$TMP/fzf.log")" 'popup feeds fzf exactly one empty candidate'
 check_contains '--disabled' "$(cat "$TMP/fzf.log")" 'popup keeps its inert candidate selectable while typing'
 check_contains "new-session -d -s project-3 -c $popup_path" "$(cat "$TMP/new.log")" 'popup creates validated session'
-check_contains 'switch-client -t =project-3' "$(cat "$TMP/new.log")" 'popup switches invoking client'
+check_contains 'switch-client -c /dev/ttys001 -t =project-3' "$(cat "$TMP/new.log")" 'popup switches invoking client'
 
 : >"$TMP/new.log"
-TMUX_LOG="$TMP/new.log" COLLISIONS='project' PATH="$BIN:$PATH" "$ROOT/scripts/tmux-new-session.sh" /tmp/project /dev/ttys001
-check_contains 'display-popup -t /dev/ttys001 -d /tmp/project -w 54 -h 4 -b rounded' "$(cat "$TMP/new.log")" 'collision fast path opens a compact rounded workspace popup for the invoking client'
-check_contains '-S fg=#504945' "$(cat "$TMP/new.log")" 'workspace popup uses a subtle gray border'
-[[ "$(cat "$TMP/new.log")" != *' -T '* ]] || fail=1
+TMUX_LOG="$TMP/new.log" COLLISIONS='project' PATH="$BIN:$PATH" "$ROOT/scripts/tmux-new-session.sh" /tmp/project /dev/ttys001 %7 80 24
+check_contains 'new-pane -P -F #{pane_id} -f -c /tmp/project -x 56 -y 6 -X 12 -Y 9' "$(cat "$TMP/new.log")" 'collision path opens a compact native workspace float'
+check_contains '-S fg=#7aa2f7 -R fg=#7aa2f7 -t %7' "$(cat "$TMP/new.log")" 'workspace float uses explicit blue pane borders'
 [[ "$(cat "$TMP/new.log")" != *'new-session -d'* ]] || fail=1
 
 : >"$TMP/fzf.count"; : >"$TMP/new.log"
@@ -192,10 +191,12 @@ check_contains 'set-hook -g client-session-changed' "$(cat "$ROOT/editors/tmux/t
 check_contains "tmux-internal-session.sh --configure-existing" "$(cat "$ROOT/editors/tmux/tmux.conf")" 'config reload repairs existing floating sessions'
 check_contains "bind w choose-tree -Zw -f '#{?#{m:_*,#{session_name}},0,1}'" "$(cat "$ROOT/editors/tmux/tmux.conf")" 'native session tree excludes floating sessions'
 check_contains "bind D choose-client -Z -f '#{?#{m:_*,#{session_name}},0,1}'" "$(cat "$ROOT/editors/tmux/tmux.conf")" 'native client picker excludes clients in floating sessions'
-check_contains "bind '(' run-shell '~/.dotfiles/scripts/tmux-switch-session.sh prev'" "$(cat "$ROOT/editors/tmux/tmux.conf")" 'native previous-session key uses filtered navigation'
-check_contains "bind ')' run-shell '~/.dotfiles/scripts/tmux-switch-session.sh next'" "$(cat "$ROOT/editors/tmux/tmux.conf")" 'native next-session key uses filtered navigation'
+check_contains "bind '(' run-shell '~/.dotfiles/scripts/tmux-switch-session.sh prev #{q:client_name} #{q:session_name}'" "$(cat "$ROOT/editors/tmux/tmux.conf")" 'native previous-session key targets the invoking client'
+check_contains "bind ')' run-shell '~/.dotfiles/scripts/tmux-switch-session.sh next #{q:client_name} #{q:session_name}'" "$(cat "$ROOT/editors/tmux/tmux.conf")" 'native next-session key targets the invoking client'
+check_contains "bind-key -n M-Left run-shell '~/.dotfiles/scripts/tmux-switch-session.sh prev #{q:client_name} #{q:session_name}'" "$(cat "$ROOT/editors/tmux/tmux.conf")" 'Alt+Left targets the invoking client'
+check_contains "bind-key -n M-Right run-shell '~/.dotfiles/scripts/tmux-switch-session.sh next #{q:client_name} #{q:session_name}'" "$(cat "$ROOT/editors/tmux/tmux.conf")" 'Alt+Right targets the invoking client'
 popup_binding="$(grep -A 6 '^bind S' "$ROOT/editors/tmux/tmux.conf")"
-check_contains "run-shell '~/.dotfiles/scripts/tmux-new-session.sh #{q:pane_current_path} #{q:client_tty}'" "$popup_binding" 'fast path expands shell-quoted path and client formats'
+check_contains "run-shell '~/.dotfiles/scripts/tmux-new-session.sh #{q:pane_current_path} #{q:client_tty} #{q:pane_id} #{window_width} #{window_height}'" "$popup_binding" 'fast path expands shell-quoted path, client, pane, and geometry formats'
 [[ "$popup_binding" != *"if-shell '~/.dotfiles/scripts/tmux-new-session.sh"* ]] || { printf 'FAIL: if-shell passes tmux formats literally to the fast path\n' >&2; fail=1; }
 
 ((fail == 0)) || exit 1

@@ -274,7 +274,19 @@ EOF
 cat >"$PICKER_BIN/tmux" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$PICKER_LOG"
-case "$1" in list-panes) printf 'alpha\t0\tmain\t%%8\tcmd;$(touch nope)\ttitle\t/tmp/a b\n' ;; display-popup) : ;; esac
+case "$1" in
+list-panes) printf 'alpha\t0\tmain\t%%8\tcmd;$(touch nope)\ttitle\t/tmp/a b\n' ;;
+new-pane)
+	for ((i = 1; i <= $#; i++)); do
+		if [[ "${!i}" == --run-picker ]]; then
+			snapshot_index=$((i + 2))
+			rm -f -- "${!snapshot_index}"
+			break
+		fi
+	done
+	printf '%%50\n'
+	;;
+esac
 EOF
 cat >"$PICKER_BIN/ps" <<'EOF'
 #!/usr/bin/env bash
@@ -283,11 +295,11 @@ printf '%s\n' "${PS_SNAPSHOT:-}"
 EOF
 chmod +x "$PICKER_BIN/fzf" "$PICKER_BIN/tmux" "$PICKER_BIN/ps"
 { for n in $(seq 1 14); do printf 'alpha\t%s\twindow %s\t%%%s\tcmd-%s;$(touch nope)\ttitle\t/tmp/a b\tcmd-%s\n' "$n" "$n" "$n" "$n" "$n"; done; printf '_popup\t1\tshell\t%%99\tzsh\tpopup\t/tmp\tzsh\n'; } >"$snapshot"
-PICKER_ARGS="$TMP/picker.args" PICKER_LOG="$PICKER_LOG" PICKER_ROWS="$PICKER_ROWS" PICKER_SELECTION=$'p\037%8' PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker.sh" alpha "$snapshot" 1 >/dev/null 2>&1 || true
+PICKER_ARGS="$TMP/picker.args" PICKER_LOG="$PICKER_LOG" PICKER_ROWS="$PICKER_ROWS" PICKER_SELECTION=$'p\037%8' PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker.sh" alpha "$snapshot" 1 /dev/ttys001 >/dev/null 2>&1 || true
 check_contains '◆ ▾ alpha' "$(cat "$PICKER_LOG")" 'picker marks the active session hierarchy'
 [[ "$(cat "$PICKER_ROWS")" != *'_popup'* ]] || { printf 'FAIL: hierarchy picker includes internal session\n' >&2; fail=1; }
 check_contains 'cmd-14;$(touch nope)' "$(cat "$PICKER_LOG")" 'picker keeps special command inert'
-check_contains 'switch-client -t %8' "$(cat "$PICKER_LOG")" 'picker switches selected pane'
+check_contains 'switch-client -c /dev/ttys001 -t %8' "$(cat "$PICKER_LOG")" 'picker switches selected pane on the invoking client'
 visible_rows="$(cut -f2- "$PICKER_ROWS")"
 [[ "$visible_rows" != *'%8'* && "$visible_rows" != *'idle'* ]] || fail=1
 check_contains $'└─ \033[38;2;146;131;116m●\033[0m cmd-14' "$visible_rows" 'picker renders idle pane state dot'
@@ -311,8 +323,8 @@ check_contains 'fg+:#282828' "$(cat "$TMP/picker.args")" 'hierarchy picker uses 
 check_contains 'printf "  %s\\n" {3}' "$(cat "$TMP/picker.args")" 'picker preview uses full path field'
 check '/tmp/a b' "$(cut -f3 "$PICKER_ROWS" | tail -n 1)" 'picker preview path is field three'
 : >"$PICKER_LOG"
-PICKER_ARGS="$TMP/picker.args" PICKER_LOG="$PICKER_LOG" PICKER_ROWS="$PICKER_ROWS" PICKER_SELECTION=$'s\037alpha' PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker.sh" alpha "$snapshot" >/dev/null 2>&1 || true
-check_contains 'switch-client -t =alpha' "$(cat "$PICKER_LOG")" 'picker switches selected session'
+PICKER_ARGS="$TMP/picker.args" PICKER_LOG="$PICKER_LOG" PICKER_ROWS="$PICKER_ROWS" PICKER_SELECTION=$'s\037alpha' PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker.sh" alpha "$snapshot" 1 /dev/ttys001 >/dev/null 2>&1 || true
+check_contains 'switch-client -c /dev/ttys001 -t =alpha' "$(cat "$PICKER_LOG")" 'picker switches selected session on the invoking client'
 claude_snapshot="$TMP/claude-pane.tsv"
 "$SCRIPT" set running alpha %15 claude 1
 printf 'alpha\t1\t1\t%%15\t1\t1\t/tmp/claude-project\tbash\n' >"$claude_snapshot"
@@ -389,10 +401,13 @@ check_contains 'switch-client -t beta' "$(cat "$PICKER_LOG")" 'session picker En
 [[ "$(cat "$PICKER_ROWS")" != *'_popup'* ]] || { printf 'FAIL: legacy picker includes internal session\n' >&2; fail=1; }
 check 3 "$(wc -l <"$legacy_snapshot" | tr -d ' ')" 'old picker snapshot remains readable'
 : >"$PICKER_LOG"
-PICKER_LOG="$PICKER_LOG" PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker-wrapper.sh" alpha /tmp >/dev/null || true
+PICKER_LOG="$PICKER_LOG" PATH="$PICKER_BIN:$PATH" "$ROOT/scripts/session-picker-wrapper.sh" alpha /tmp 120 40 %1 /dev/ttys001 >/dev/null || true
 popup_command="$(cat "$PICKER_LOG")"
-check_contains 'display-popup -d /tmp -w 90% -h 80% -B' "$popup_command" 'picker popup keeps percentage sizing without a tmux border'
-[[ "$popup_command" != *' -b '* && "$popup_command" != *' -S '* && "$popup_command" != *' -T '* ]] || fail=1
+check_contains 'new-pane -P -F #{pane_id} -f -c /tmp -x 96 -y 32 -X 12 -Y 4' "$popup_command" 'picker opens with compact adaptive native-float geometry'
+check_contains '-S fg=#7aa2f7 -R fg=#7aa2f7 -t %1' "$popup_command" 'picker keeps explicit blue native pane borders'
+check_contains '--run-picker alpha' "$popup_command" 'picker child receives the captured session and invoking client context'
+check_contains '/dev/ttys001' "$popup_command" 'picker child targets the invoking client'
+[[ "$popup_command" != *'display-popup'* ]] || fail=1
 check 1 "$(grep -c '^list-panes -a' "$PICKER_LOG" || true)" 'picker opens with one bulk snapshot'
 
 # Sound is opt-in, synchronous for deterministic tests, and deduplicated by

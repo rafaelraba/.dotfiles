@@ -2,9 +2,11 @@
 set -euo pipefail
 
 # Navega entre sesiones "normales" de tmux (ignora las flotantes _*).
-# Uso: ~/.dotfiles/scripts/tmux-switch-session.sh [prev|next]
+# Uso: ~/.dotfiles/scripts/tmux-switch-session.sh [prev|next] [client] [current_session]
 
 readonly DIRECTION="${1:-next}"
+readonly TARGET_CLIENT="${2:-}"
+readonly SOURCE_SESSION="${3:-}"
 
 if [[ "$DIRECTION" != "prev" && "$DIRECTION" != "next" ]]; then
   printf 'Usage: %s [prev|next]\n' "${0##*/}" >&2
@@ -25,11 +27,22 @@ if ((${#sessions[@]} <= 1)); then
   exit 0
 fi
 
-if [[ -n "${TMUX_PANE:-}" ]]; then
+if [[ -n "$SOURCE_SESSION" ]]; then
+  current="$SOURCE_SESSION"
+elif [[ -n "${TMUX_PANE:-}" ]]; then
   current="$(tmux display-message -p -t "$TMUX_PANE" '#S')"
 else
   current="$(tmux display-message -p '#S')"
 fi
+
+switch_to() {
+  if [[ -n "$TARGET_CLIENT" ]]; then
+    tmux switch-client -c "$TARGET_CLIENT" -t "$1"
+  else
+    tmux switch-client -t "$1"
+  fi
+}
+
 current_idx=-1
 for i in "${!sessions[@]}"; do
   if [[ "${sessions[$i]}" == "$current" ]]; then
@@ -40,7 +53,7 @@ done
 
 # Si la sesión actual no está en la lista (p. ej. es una flotante), ir a la primera disponible.
 if ((current_idx == -1)); then
-  tmux switch-client -t "${sessions[0]}"
+  switch_to "${sessions[0]}"
   exit 0
 fi
 
@@ -51,5 +64,5 @@ esac
 
 target="${sessions[$target_idx]}"
 if [[ "$target" != "$current" ]]; then
-  tmux switch-client -t "$target"
+  switch_to "$target"
 fi

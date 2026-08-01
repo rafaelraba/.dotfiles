@@ -1,17 +1,42 @@
 #!/usr/bin/env bash
-# Wrapper que captura el estado de sesiones ANTES de abrir el popup.
-# Esto evita inconsistencias de tmux dentro del contexto de display-popup (tmux ≥3.6).
+# Wrapper que captura el estado de sesiones ANTES de abrir el panel flotante.
+# Esto mantiene una vista coherente mientras se crea el panel nativo de tmux.
 #
 # Llamado desde el binding de tmux:
-#   bind s ... { run-shell -t = "~/.dotfiles/scripts/session-picker-wrapper.sh '#S' '#{pane_current_path}'" }
+#   bind s ... { run-shell -t = '~/.dotfiles/scripts/session-picker-wrapper.sh ...' }
 set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [[ "${1:-}" == "--run-picker" ]]; then
+    CURRENT="${2:-}"
+    SPFILE="${3:-}"
+    SESSION_COUNT="${4:-0}"
+    TARGET_CLIENT="${5:-}"
+
+    trap 'rm -f -- "$SPFILE"' EXIT
+    trap 'exit 0' HUP INT TERM
+
+    "$ROOT/session-picker.sh" "$CURRENT" "$SPFILE" "$SESSION_COUNT" "$TARGET_CLIENT"
+    exit 0
+fi
 
 CURRENT="${1:-}"
 PANEDIR="${2:-$HOME}"
 CLIENT_WIDTH="${3:-$(tmux display-message -p '#{client_width}' 2>/dev/null || printf '108')}"
+CLIENT_HEIGHT="${4:-$(tmux display-message -p '#{client_height}' 2>/dev/null || printf '30')}"
+TARGET_PANE="${5:-$(tmux display-message -p '#{pane_id}' 2>/dev/null || true)}"
+TARGET_CLIENT="${6:-}"
 
 if ! [[ "$CLIENT_WIDTH" =~ ^[0-9]+$ ]]; then
     CLIENT_WIDTH=108
+fi
+if ! [[ "$CLIENT_HEIGHT" =~ ^[0-9]+$ ]]; then
+    CLIENT_HEIGHT=30
+fi
+if [[ -z "$TARGET_PANE" ]]; then
+    tmux display-message "Unable to locate the source pane"
+    exit 1
 fi
 
 active_tool() {
@@ -76,8 +101,9 @@ calculate_popup_width() {
 }
 
 # Archivo temporal donde guardamos la lista de sesiones pre-capturada.
-# NO se borra aquí: lo limpia session-picker.sh al terminar.
+# El proceso hijo del panel lo elimina al terminar.
 SPFILE=$(mktemp /tmp/tmux-sp-XXXXXX)
+trap 'rm -f -- "$SPFILE"' EXIT
 
 # Capture exactly one render-local pane snapshot before opening the popup.
 "$(dirname "${BASH_SOURCE[0]}")/agent-status.sh" snapshot |
@@ -91,13 +117,19 @@ if [[ ! -s "$SPFILE" ]]; then
 fi
 
 SESSION_COUNT=$(cut -f1 "$SPFILE" | sort -u | wc -l | tr -d ' ')
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-printf -v picker_command '%q %q %q %q; rm -f -- %q' "$ROOT/session-picker.sh" "$CURRENT" "$SPFILE" "$SESSION_COUNT" "$SPFILE"
+FLOAT_WIDTH="$(calculate_popup_width)"
+FLOAT_HEIGHT=$((CLIENT_HEIGHT * 80 / 100))
+((FLOAT_HEIGHT >= 4)) || FLOAT_HEIGHT=4
+FLOAT_X=$(((CLIENT_WIDTH - FLOAT_WIDTH) / 2))
+FLOAT_Y=$(((CLIENT_HEIGHT - FLOAT_HEIGHT) / 2))
 
-# Abrir el popup con los datos pre-capturados.
-# session-picker.sh lee de $SPFILE y lo borra al terminar.
-exec tmux display-popup \
-    -d "$PANEDIR" \
-    -w 90% -h 80% -B \
-    -s "bg=#1d2021,fg=#d4be98" \
-    -E "$picker_command"
+# The picker child owns the snapshot after new-pane succeeds. Exiting the child
+# removes the one-shot floating pane on selection, cancellation, or a signal.
+FLOAT_PANE=$(tmux new-pane -P -F '#{pane_id}' -f \
+    -c "$PANEDIR" -x "$FLOAT_WIDTH" -y "$FLOAT_HEIGHT" -X "$FLOAT_X" -Y "$FLOAT_Y" \
+    -s "bg=#1d2021,fg=#d4be98" -S "fg=#7aa2f7" -R "fg=#7aa2f7" \
+    -t "$TARGET_PANE" \
+    "$0" --run-picker "$CURRENT" "$SPFILE" "$SESSION_COUNT" "$TARGET_CLIENT")
+trap - EXIT
+tmux set-option -p -t "$FLOAT_PANE" @session_picker 1
+tmux select-pane -t "$FLOAT_PANE"

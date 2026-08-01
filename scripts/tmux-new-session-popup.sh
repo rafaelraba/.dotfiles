@@ -2,6 +2,7 @@
 set -euo pipefail
 
 pane_path="$PWD"
+target_client="${1:-}"
 base_name="$(basename "$pane_path")"
 base_name="${base_name#.}"
 
@@ -33,14 +34,18 @@ validate_name() {
 name="$(default_name)"
 error=''
 while true; do
-  selection="$(printf '\n' | fzf --height=100% --layout=reverse --disabled --no-border --no-info --no-separator --no-scrollbar --pointer='' --margin=0,1 \
+  selection="$(printf '\n' | fzf --height=100% --layout=reverse --disabled --border=rounded --border-label=' new workspace ' --no-info --no-separator --no-scrollbar --pointer='' --margin=0 \
     --print-query --query="$name" --prompt='Workspace name: ' --header="$error" \
-    --color='bg:#1d2021,fg:#d4be98,bg+:#1d2021,fg+:#1d2021,header:#ea6962,prompt:#d79921,pointer:#1d2021,query:#d4be98' \
+    --color='bg:#1d2021,fg:#d4be98,bg+:#1d2021,fg+:#1d2021,border:#7aa2f7,label:#7aa2f7,header:#ea6962,prompt:#d79921,pointer:#1d2021,query:#d4be98' \
     --bind='enter:accept,esc:abort' 2>/dev/null)" || exit 0
   name="${selection%%$'\n'*}"
   if error="$(validate_name "$name")"; then
     tmux new-session -d -s "$name" -c "$pane_path"
-    tmux switch-client -t "=$name"
+    if [[ -n "$target_client" ]]; then
+      tmux switch-client -c "$target_client" -t "=$name"
+    else
+      tmux switch-client -t "=$name"
+    fi
     exit 0
   fi
 done

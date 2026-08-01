@@ -2,18 +2,19 @@
 set -euo pipefail
 
 # Compact session picker using the Gruvbox Material dark hard palette.
-# Usage: ~/.dotfiles/scripts/session-picker.sh [current_session] [sessions_file] [session_count]
+# Usage: ~/.dotfiles/scripts/session-picker.sh [current_session] [sessions_file] [session_count] [target_client]
 #
 #   current_session : nombre de la sesión actual (opcional, se detecta automáticamente)
 #   sessions_file   : archivo con output pre-capturado de `tmux list-sessions`
 #                     (opcional; si no se provee, se consulta a tmux directamente)
 #
-# El archivo de sesiones evita inconsistencias cuando el script corre dentro
-# de un display-popup, que en tmux ≥3.6 puede reportar datos desactualizados.
+# El archivo de sesiones preserva la vista capturada antes de crear el panel
+# flotante nativo.
 
 current="${1:-$(tmux display-message -p '#S' 2>/dev/null || true)}"
 sessions_file="${2:-}"
 session_count="${3:-}"
+target_client="${4:-}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=agent-status/config.sh
 source "$ROOT/agent-status/config.sh"
@@ -22,6 +23,14 @@ source "$ROOT/agent-status/store.sh"
 # shellcheck source=agent-status/order.sh
 source "$ROOT/agent-status/order.sh"
 agent_status_load_config || exit 0
+
+switch_to() {
+	if [[ -n "$target_client" ]]; then
+		tmux switch-client -c "$target_client" -t "$1"
+	else
+		tmux switch-client -t "$1"
+	fi
+}
 
 active_tool() {
 	local window_name="$1"
@@ -227,8 +236,8 @@ if [[ "$snapshot_pane" == %* ]]; then
 	target="${selected%%$'\t'*}"
 	type="${target%%$'\037'*}"; payload="${target#*$'\037'}"
 	case "$type" in
-		s) tmux switch-client -t "=$payload" ;;
-		p) tmux switch-client -t "$payload" ;;
+		s) switch_to "=$payload" ;;
+		p) switch_to "$payload" ;;
 	esac
 	exit 0
 fi
@@ -393,4 +402,4 @@ selected="$({ session_rows || true; } |
 		--color="${FZF_COLORS}" |
 	cut -f1)" || exit 0
 
-[[ -n "$selected" ]] && tmux switch-client -t "$selected"
+[[ -n "$selected" ]] && switch_to "$selected"
