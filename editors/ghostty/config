@@ -24,9 +24,9 @@ macos-option-as-alt = left
 # 📝 Font
 
 font-size = 15
+font-family = JetBrainsMono Nerd Font Mono
 font-thicken = true
 adjust-cell-height = 30%
-font-family = JetBrainsMono Nerd Font Mono
 
 # 📋 Clipboard
 

@@ -131,7 +131,7 @@ Important restore files:
 | `editors/opencode/plugins/tmux-agent-status.ts` | `~/.config/opencode/plugins/tmux-agent-status.ts` |
 | `editors/claude/settings.json` | `~/.claude/settings.json`, including Claude Code hooks for tmux status. |
 | `scripts/claude-agent-status.sh` | Claude Code hook adapter for tmux status. |
-| `editors/codex/config.toml` | `~/.codex/config.toml`, including the completion notifier. |
+| `editors/codex/config.reference.toml` | Non-deployed, sanitized Codex reference. Gentle AI manages the regular `~/.codex/config.toml`, including the completion notifier. |
 | `scripts/codex-agent-status.sh` | Codex completion adapter; preserves the existing desktop notifier. |
 | `scripts/codex-status-refresh.sh` | Bounded Codex screen classifier used by the tmux status refresh. |
 
@@ -142,7 +142,7 @@ Quick verification:
 ```bash
 test -L ~/.claude/settings.json
 test -L ~/.config/opencode/plugins/tmux-agent-status.ts
-test -L ~/.codex/config.toml
+test -f ~/.codex/config.toml && ! test -L ~/.codex/config.toml
 test -L ~/.codex/agent-status-notify.sh
 ```
 
@@ -184,7 +184,7 @@ Current workspace model:
 - [ ] `marksman` is attached to Markdown buffers (`:LspInfo`) and `<leader>mp` opens a browser preview.
 - [ ] `tmux` starts and the prefix is `Ctrl+a`.
 - [ ] Claude Code, OpenCode, and Codex restart with tmux agent status integrations loaded.
-- [ ] `~/.claude/settings.json`, `~/.config/opencode/plugins/tmux-agent-status.ts`, and `~/.codex/config.toml` are symlinks into `~/.dotfiles`.
+- [ ] `~/.claude/settings.json` and `~/.config/opencode/plugins/tmux-agent-status.ts` are symlinks into `~/.dotfiles`; `~/.codex/config.toml` is a regular file managed by Gentle AI.
 - [ ] `lazygit` opens.
 - [ ] `ghostty` uses a Nerd Font.
 - [ ] Raycast window-management shortcuts respond.

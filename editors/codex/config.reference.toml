@@ -1,0 +1,101 @@
+# Codex configuration reference. This file is not deployed by dotly.
+# Gentle AI owns the live, regular file at ~/.codex/config.toml.
+# Do not add a dotly mapping for this file or for ~/.codex/config.toml.
+#
+# Before manually adapting this reference, replace these literal placeholders:
+#   <CODEX_HOME>              Absolute path to the Codex home directory.
+#   <CHATGPT_APP_RESOURCES>   ChatGPT.app Resources directory.
+#   <HOMEBREW_PREFIX>         Homebrew installation prefix.
+# Codex does not expand these placeholders. The node REPL receives CODEX_HOME
+# as an environment variable from this configuration; no secret is required.
+#
+# Omitted machine-local state: marketplace discovery, installed-plugin state,
+# trusted projects, model-availability prompts, hook hashes, and app build hashes.
+
+default_permissions = "gentle-dev"
+model_instructions_file = "<CODEX_HOME>/engram-instructions.md"
+experimental_compact_prompt_file = "<CODEX_HOME>/engram-compact-prompt.md"
+model = "gpt-5.6-sol"
+model_reasoning_effort = "low"
+
+notify = ["<CODEX_HOME>/computer-use/Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/MacOS/SkyComputerUseClient", "turn-ended", "--previous-notify", "[\"<CODEX_HOME>/agent-status-notify.sh\",\"<CODEX_HOME>/computer-use/Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/MacOS/SkyComputerUseClient\",\"turn-ended\"]"]
+
+[tui]
+status_line = ["current-dir", "model", "reasoning", "git-branch", "context-used", "used-tokens", "context-window-size"]
+status_line_use_colors = true
+theme = "gruvbox-dark"
+
+[mcp_servers.node_repl]
+args = []
+command = "<CHATGPT_APP_RESOURCES>/cua_node/bin/node_repl"
+startup_timeout_sec = 120
+
+[mcp_servers.node_repl.env]
+NODE_REPL_NATIVE_PIPE_CONNECT_TIMEOUT_MS = "1000"
+NODE_REPL_NODE_MODULE_DIRS = "<CHATGPT_APP_RESOURCES>/cua_node/lib/node_modules"
+NODE_REPL_NODE_PATH = "<CHATGPT_APP_RESOURCES>/cua_node/bin/node"
+NODE_REPL_TRUSTED_CODE_PATHS = "<CODEX_HOME>"
+CODEX_HOME = "<CODEX_HOME>"
+BROWSER_USE_AVAILABLE_BACKENDS = "chrome,iab"
+NODE_REPL_INSTRUCTIONS_USE_CASE_BROWSER = "Control the in-app browser in conjunction with the Browser Plugin."
+NODE_REPL_INSTRUCTIONS_USE_CASE_CHROME = "Control the Chrome browser in conjunction with the Chrome Plugin. Prefer this method of controlling Chrome over alternatives (such as Computer Use) unless the user explicitly mentions an alternative."
+NODE_REPL_INSTRUCTIONS_USE_CASE_COMPUTER_USE = "Control desktop apps on macOS through Computer Use."
+BROWSER_USE_CODEX_APP_BUILD_FLAVOR = "prod"
+CODEX_CLI_PATH = "<CHATGPT_APP_RESOURCES>/codex"
+
+[desktop]
+ambient-suggestions-enabled = true
+conversationDetailMode = "STEPS_PROSE"
+followUpQueueMode = "queue"
+dock-icon-preference = "codex-system"
+
+[desktop.open-in-target-preferences]
+global = "intellij"
+
+[features]
+hooks = true
+multi_agent = true
+js_repl = false
+
+[agents]
+max_depth = 2
+max_threads = 4
+
+[permissions.gentle-dev]
+
+[permissions.gentle-dev.network]
+
+[permissions.gentle-dev.network.domains]
+
+[permissions.gentle-dev.workspace_roots]
+"<CODEX_HOME>/.." = true
+
+[permissions.gentle-dev.filesystem.":workspace_roots"]
+"**/secrets/**" = "deny"
+"**/credentials.json" = "deny"
+"**/Library/Keychains/**" = "deny"
+"**/.ssh/**" = "deny"
+"**/.credentials/**" = "deny"
+"**/.config/gh/hosts.yml" = "deny"
+"**/.aws/credentials" = "deny"
+"**/.env.*.local" = "deny"
+"**/.env.local" = "deny"
+
+[shell_environment_policy.set]
+BROWSER_USE_AVAILABLE_BACKENDS = "chrome,iab"
+NODE_REPL_TRUSTED_CODE_PATHS = "<CODEX_HOME>"
+
+[permissions.gentle-dev.filesystem]
+
+[mcp_servers.computer-use]
+command = "./Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/MacOS/SkyComputerUseClient"
+args = ["mcp"]
+cwd = "."
+enabled = false
+
+[mcp_servers.engram]
+command = "<HOMEBREW_PREFIX>/bin/engram"
+args = ["mcp", "--tools=agent"]
+
+[mcp_servers.context7]
+url = "https://mcp.context7.com/mcp"
