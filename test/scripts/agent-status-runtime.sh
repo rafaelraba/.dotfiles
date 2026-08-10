@@ -121,7 +121,12 @@ EOF
   runtime_output="$(RUNTIME_ARG_LOG="$TMP/runtime-args" render_runtime_tab "$runtime_path")"
   check "$baseline" "$runtime_output" 'compatible runtime preserves v1 tab output'
   check "5:snapshot" "$(cat "$TMP/runtime-args")" 'configured runtime path executes as one argv without evaluation'
-  check 1 "$(test -e "$TMP/pwn"; printf '%s' "$?")" 'runtime path metacharacters remain inert'
+  if test -e "$TMP/pwn"; then
+    pwn_status=0
+  else
+    pwn_status=1
+  fi
+  check 1 "$pwn_status" 'runtime path metacharacters remain inert'
 
   differing_runtime="$TMP/differing-runtime"
   write_runtime "$differing_runtime" 'sleep 0.3; printf '\''{"schema_version":2,"epoch":"v1","revision":0,"panes":[{"session":"oldest","pane":"_7","state":"error"}],"sessions":[{"name":"oldest","state":"error"}]}\n'\'''
@@ -130,7 +135,12 @@ EOF
 
   disabled_output="$(AGENT_STATUS_RUNTIME_ENABLED=0 RUNTIME_ARG_LOG="$TMP/disabled-args" render_runtime_tab "$runtime_path")"
   check "$baseline" "$disabled_output" 'disabled runtime preserves v1 output parity'
-  check 1 "$(test -e "$TMP/disabled-args"; printf '%s' "$?")" 'disabled runtime skips the probe'
+  if test -e "$TMP/disabled-args"; then
+    disabled_status=0
+  else
+    disabled_status=1
+  fi
+  check 1 "$disabled_status" 'disabled runtime skips the probe'
 
   for failure in relative timeout crash oversized malformed schema inventory; do
     case "$failure" in
@@ -158,7 +168,12 @@ EOF
   chmod +x "$TMP/build-bin/go"
   runtime_build="$TMP/restored runtime"
   GO_BUILD_LOG="$TMP/go-build.log" AGENT_STATUS_RUNTIME_BUILD_PATH="$runtime_build" PATH="$TMP/build-bin:$PATH" "$ROOT/restoration_scripts/01-verify-install.sh" >/dev/null
-  check 0 "$(test -x "$runtime_build"; printf '%s' "$?")" 'restoration builds runtime when Go exists'
+  if test -x "$runtime_build"; then
+    build_status=0
+  else
+    build_status=1
+  fi
+  check 0 "$build_status" 'restoration builds runtime when Go exists'
   contains "build -o $runtime_build ./cmd/agent-status-runtime" "$(cat "$TMP/go-build.log")" 'restoration source build uses the runtime command package'
   rm -f "$runtime_build"
   GO_BUILD_FAIL=1 GO_BUILD_LOG="$TMP/go-build-failed.log" AGENT_STATUS_RUNTIME_BUILD_PATH="$runtime_build" PATH="$TMP/build-bin:$PATH" "$ROOT/restoration_scripts/01-verify-install.sh" >/dev/null
