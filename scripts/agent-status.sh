@@ -36,6 +36,7 @@ Usage:
   agent-status.sh clear [session] [pane]
   agent-status.sh inspect [session] [pane]
   agent-status.sh doctor
+  agent-status.sh runtime-snapshot
 EOF
 }
 
@@ -163,6 +164,33 @@ aggregate_session_summary() {
   printf '\n'
 }
 
+agent_status_runtime_snapshot() {
+	local runtime_path now
+	[[ "${AGENT_STATUS_RUNTIME_ENABLED:-1}" != "0" ]] || return 1
+	runtime_path="${AGENT_STATUS_RUNTIME_PATH:-$ROOT/agent-status-runtime/bin/agent-status-runtime}"
+	[[ "$runtime_path" = /* && -x "$runtime_path" ]] || return 1
+	now="$(store_now)"
+	python3 - "$runtime_path" "$STATUS_DIR" "$now" <<'PY'
+import subprocess
+import sys
+
+try:
+    completed = subprocess.run(
+        [sys.argv[1], "snapshot", "--root", sys.argv[2], "--now", sys.argv[3]],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        timeout=1.0,
+        check=False,
+    )
+except (OSError, subprocess.TimeoutExpired):
+    sys.exit(1)
+
+if completed.returncode != 0 or len(completed.stdout) > 65536:
+    sys.exit(1)
+sys.stdout.buffer.write(completed.stdout)
+PY
+}
+
 command="${1:-}"
 shift || true
 
@@ -205,7 +233,10 @@ clear)
 			"$AGENT_STATUS_CONFIG_VERSION" "$STATUS_DIR" "$AGENT_STATUS_SOUND_ENABLED" \
 			"$AGENT_STATUS_SOUND_BACKEND" "$AGENT_STATUS_SOUND_FILE" "$(notify_sound_status)"
 		;;
-*)
+	runtime-snapshot)
+		agent_status_runtime_snapshot
+		;;
+	*)
 	usage
 	exit 1
 	;;
