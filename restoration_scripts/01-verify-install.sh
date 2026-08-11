@@ -66,6 +66,20 @@ echo "Window management:"
 check_command sketchybar
 
 echo ""
+echo "Agent status runtime:"
+if command -v go >/dev/null 2>&1; then
+    runtime_module="$DOTFILES_PATH/scripts/agent-status-runtime"
+    runtime_binary="${AGENT_STATUS_RUNTIME_BUILD_PATH:-$runtime_module/bin/agent-status-runtime}"
+    if [ -f "$runtime_module/go.mod" ] && mkdir -p "$(dirname "$runtime_binary")" && (cd "$runtime_module" && go build -o "$runtime_binary" ./cmd/agent-status-runtime); then
+        echo "  ✅ agent-status-runtime"
+    else
+        echo "  ⚠️  agent-status-runtime source build unavailable; v1 fallback remains active"
+    fi
+else
+    echo "  ⚠️  Go unavailable; v1 fallback remains active"
+fi
+
+echo ""
 echo "Neovim Markdown:"
 if nvim --headless '+lua assert(vim.fn.executable("marksman") == 1, "marksman is not in PATH")' '+qall'; then
     echo "  ✅ marksman"

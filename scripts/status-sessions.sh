@@ -43,7 +43,12 @@ compact_session_name() {
 }
 
 session_status() {
-	local session="$1" row_session _ _ pane _ state best=idle priority best_priority=10 safe_session
+	local session="$1" row_session _ _ pane _ state best=idle priority best_priority=10 safe_session runtime_state
+	runtime_state="$(runtime_session_state "$session")"
+	if [[ -n "$runtime_state" ]]; then
+		printf '%s\n' "$runtime_state"
+		return
+	fi
 	safe_session="$(printf '%s' "$session" | tr -c '[:alnum:]_.-' '_')"
 	while IFS=$'\t' read -r row_session _ _ pane _; do
 		[[ "$row_session" == "$session" ]] || continue
@@ -52,6 +57,49 @@ session_status() {
 		((priority > best_priority)) && { best="$state"; best_priority=$priority; }
 	done <<<"$snapshot"
 	printf '%s\n' "$best"
+}
+
+runtime_session_state() {
+	local wanted="$1" session state
+	while IFS=$'\t' read -r session state; do
+		[[ "$session" == "$wanted" ]] && { printf '%s' "$state"; return; }
+	done <<<"${runtime_sessions:-}"
+}
+
+runtime_session_states() {
+	AGENT_STATUS_RUNTIME_INVENTORY="$snapshot" python3 -c '
+import json
+import os
+import re
+import sys
+
+try:
+    data = json.load(sys.stdin)
+    if data.get("schema_version") != 2:
+        raise ValueError
+    inventory = set()
+    sessions = set()
+    for row in os.environ["AGENT_STATUS_RUNTIME_INVENTORY"].splitlines():
+        fields = row.split("\t")
+        if len(fields) < 4:
+            continue
+        sessions.add(fields[0])
+        inventory.add((fields[0], re.sub(r"[^A-Za-z0-9_.-]", "_", fields[3])))
+    valid = {"running", "permission", "waiting_for_input", "blocked", "done", "idle", "error"}
+    for pane in data["panes"]:
+        if not isinstance(pane, dict) or (pane.get("session"), pane.get("pane")) not in inventory or pane.get("state") not in valid:
+            raise ValueError
+    rows = []
+    for item in data["sessions"]:
+        if not isinstance(item, dict) or item.get("name") not in sessions or item.get("state") not in valid:
+            raise ValueError
+        rows.append((item["name"], item["state"]))
+    if len({name for name, _ in rows}) != len(rows):
+        raise ValueError
+    print("".join(f"{name}\t{state}\n" for name, state in sorted(rows)), end="")
+except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+    sys.exit(1)
+'
 }
 
 status_bg() {
@@ -95,6 +143,8 @@ render_session_tab() {
 sessions=()
 snapshot="$(tmux list-panes -a -F $'#{session_name}\t#{window_index}\t#{window_name}\t#{pane_id}\t#{pane_current_command}\t#{pane_title}\t#{pane_current_path}\t#{pane_start_command}\t#{pane_pid}' 2>/dev/null || true)"
 AGENT_STATUS_PANE_SNAPSHOT="$snapshot" "$ROOT/codex-status-refresh.sh" >/dev/null 2>&1 || true
+runtime_snapshot="$("$ROOT/agent-status.sh" runtime-snapshot 2>/dev/null || true)"
+runtime_sessions="$(printf '%s' "$runtime_snapshot" | runtime_session_states 2>/dev/null || true)"
 while IFS= read -r session; do
 	[[ -n "$session" ]] && sessions+=("$session")
 done < <(
