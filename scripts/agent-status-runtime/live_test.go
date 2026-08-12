@@ -1,9 +1,12 @@
 package runtime
 
 import (
+	"encoding/json"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestApplyEventUpdatesDeterministicState(t *testing.T) {
@@ -131,5 +134,93 @@ func TestOwnerSerializesConcurrentPublishes(t *testing.T) {
 	first, second := <-results, <-results
 	if first.Revision+second.Revision != 3 || owner.Snapshot().Revision != 2 {
 		t.Fatalf("revisions = %d, %d, final = %d", first.Revision, second.Revision, owner.Snapshot().Revision)
+	}
+}
+
+func TestDecodeRequestRejectsUnsafeFrames(t *testing.T) {
+	for _, frame := range []string{
+		"\n",
+		`{"op":"snapshot"}` + "\nextra",
+		`{"op":"snapshot","op":"snapshot"}` + "\n",
+		`{"op":"unknown"}` + "\n",
+		`{"op":"publish","event":{"schema_version":2,"session":"work","pane":"p1","source":"agent","state":"running","extra":true}}` + "\n",
+		`{"op":"publish","event":{"schema_version":2,"session":"work","pane":"p1","source":"agent","state":"running","state":"done"}}` + "\n",
+		`{"op":"publish","event":{"schema_version":2,"session":"bad/id","pane":"p1","source":"agent","state":"running"}}` + "\n",
+		`{"op":"subscribe","cursor":{"epoch":"epoch","revision":1,"extra":true}}` + "\n",
+		strings.Repeat("x", 64<<10) + "\n",
+	} {
+		if _, err := DecodeRequest([]byte(frame)); err == nil {
+			t.Fatalf("DecodeRequest(%q) accepted unsafe frame", frame[:min(len(frame), 20)])
+		}
+	}
+	for _, frame := range []string{
+		`{"op":"snapshot"}` + "\n",
+		`{"op":"publish","event":{"schema_version":2,"session":"work","pane":"p1","source":"agent","state":"running"}}` + "\n",
+		`{"op":"subscribe","cursor":{"epoch":"epoch","revision":1}}` + "\n",
+	} {
+		if _, err := DecodeRequest([]byte(frame)); err != nil {
+			t.Fatalf("DecodeRequest(%q) error = %v", frame, err)
+		}
+	}
+}
+
+func TestEncodeResponseProducesBoundedMachineReadableNDJSON(t *testing.T) {
+	encoded, err := EncodeResponse(Response{Type: "event", Event: &ProtocolEvent{SchemaVersion: 2, Epoch: "epoch", Revision: 1, Session: "work", Pane: "p1", Source: "agent", State: "running"}})
+	if err != nil {
+		t.Fatalf("EncodeResponse() error = %v", err)
+	}
+	var value map[string]any
+	if err := json.Unmarshal(encoded, &value); err != nil {
+		t.Fatalf("encoded response is not JSON: %v", err)
+	}
+	if string(encoded[len(encoded)-1]) != "\n" || value["type"] != "event" || value["event"].(map[string]any)["schema_version"] != float64(2) {
+		t.Fatalf("EncodeResponse() = %s", encoded)
+	}
+}
+
+func TestOwnerSubscribeReplaysThenStreamsOnce(t *testing.T) {
+	owner := NewOwner(Snapshot{SchemaVersion: SchemaVersion})
+	defer owner.Close()
+	for _, pane := range []string{"p1", "p2"} {
+		if _, err := owner.Publish(Event{SchemaVersion: SchemaVersion, Identity: Identity{Session: "work", Pane: pane, Source: "agent"}, State: "running"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	state := owner.Snapshot()
+	replay, stream, err := owner.Subscribe(Cursor{Epoch: state.Epoch, Revision: 0})
+	if err != nil || len(replay) != 2 || replay[0].Revision != 1 || replay[1].Revision != 2 {
+		t.Fatalf("Subscribe() = %#v, %v", replay, err)
+	}
+	if _, err := owner.Publish(Event{SchemaVersion: SchemaVersion, Identity: Identity{Session: "work", Pane: "p3", Source: "agent"}, State: "done"}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case event := <-stream:
+		if event.Revision != 3 {
+			t.Fatalf("stream revision = %d", event.Revision)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("stream did not receive live event")
+	}
+	_, slow, err := owner.Subscribe(Cursor{Epoch: state.Epoch, Revision: state.Revision})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i <= 33; i++ {
+		if _, err := owner.Publish(Event{SchemaVersion: SchemaVersion, Identity: Identity{Session: "work", Pane: "slow", Source: "agent"}, State: "running", ProducerRevision: uint64(i)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	count := 0
+	for range slow {
+		count++
+	}
+	if count != 32 {
+		t.Fatalf("slow queue = %d", count)
+	}
+	for _, cursor := range []Cursor{{}, {Epoch: "old", Revision: 0}, {Epoch: state.Epoch, Revision: 99}} {
+		if _, _, err := owner.Subscribe(cursor); err == nil {
+			t.Fatalf("cursor %#v accepted", cursor)
+		}
 	}
 }
