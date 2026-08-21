@@ -1,13 +1,19 @@
 package runtime
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"net"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
+	"time"
 	"unicode/utf8"
 )
 
@@ -221,6 +227,133 @@ func EncodeResponse(value Response) ([]byte, error) {
 		return nil, configInvalid
 	}
 	return append(encoded, '\n'), nil
+}
+func ListenSocket(root, endpoint string) (*net.UnixListener, func(), error) {
+	if !filepath.IsAbs(root) || !filepath.IsAbs(endpoint) {
+		return nil, nil, configInvalid
+	}
+	relative, err := filepath.Rel(root, endpoint)
+	if err != nil || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return nil, nil, configInvalid
+	}
+	if err := secureSocketAncestors(root, filepath.Dir(relative)); err != nil {
+		return nil, nil, configInvalid
+	}
+	if _, err := os.Lstat(endpoint); err == nil || !os.IsNotExist(err) {
+		return nil, nil, configInvalid
+	}
+	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: endpoint, Net: "unix"})
+	if err != nil {
+		return nil, nil, err
+	}
+	listener.SetUnlinkOnClose(false)
+	created, err := os.Lstat(endpoint)
+	if err != nil || created.Mode()&os.ModeSocket == 0 || !ownedByCurrentUser(created) {
+		listener.Close()
+		return nil, nil, configInvalid
+	}
+	cleanup := func() {
+		_ = listener.Close()
+		if current, err := os.Lstat(endpoint); err == nil && sameInode(created, current) {
+			_ = os.Remove(endpoint)
+		}
+	}
+	if err := os.Chmod(endpoint, 0600); err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	created, err = os.Lstat(endpoint)
+	if err != nil || created.Mode().Perm() != 0600 || !ownedByCurrentUser(created) {
+		cleanup()
+		return nil, nil, configInvalid
+	}
+	return listener, cleanup, nil
+}
+func secureSocketAncestors(root, relative string) error {
+	path := root
+	for _, component := range append([]string{"."}, strings.Split(relative, string(filepath.Separator))...) {
+		if component != "." {
+			path = filepath.Join(path, component)
+		}
+		info, err := os.Lstat(path)
+		if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm() != 0700 || !ownedByCurrentUser(info) {
+			return configInvalid
+		}
+	}
+	return nil
+}
+func ServeSocket(listener *net.UnixListener, owner *Owner) {
+	for {
+		connection, err := listener.AcceptUnix()
+		if err != nil {
+			return
+		}
+		go serveConnection(connection, owner)
+	}
+}
+func serveConnection(connection *net.UnixConn, owner *Owner) {
+	defer connection.Close()
+	_ = connection.SetReadDeadline(time.Now().Add(time.Second))
+	frame, err := bufio.NewReader(io.LimitReader(connection, 64<<10+1)).ReadBytes('\n')
+	if err != nil || len(frame) > 64<<10 {
+		return
+	}
+	request, err := DecodeRequest(frame)
+	if err != nil {
+		writeResponse(connection, Response{Type: "error", Code: "invalid"})
+		return
+	}
+	switch request.Op {
+	case "snapshot":
+		writeResponse(connection, Response{Type: "snapshot", Snapshot: owner.Snapshot()})
+	case "publish":
+		snapshot, err := owner.Publish(request.Event)
+		if err != nil {
+			writeResponse(connection, Response{Type: "error", Code: "invalid"})
+			return
+		}
+		writeResponse(connection, Response{Type: "ack", Snapshot: snapshot})
+	case "subscribe":
+		replay, stream, err := owner.Subscribe(request.Cursor)
+		if err != nil {
+			writeResponse(connection, Response{Type: "gap"})
+			return
+		}
+		for _, event := range replay {
+			if !writeResponse(connection, Response{Type: "event", Event: protocolEvent(event)}) {
+				return
+			}
+		}
+		for event := range stream {
+			if !writeResponse(connection, Response{Type: "event", Event: protocolEvent(event)}) {
+				return
+			}
+		}
+	}
+}
+
+func writeResponse(connection *net.UnixConn, response Response) bool {
+	encoded, err := EncodeResponse(response)
+	if err != nil {
+		return false
+	}
+	_ = connection.SetWriteDeadline(time.Now().Add(time.Second))
+	_, err = connection.Write(encoded)
+	return err == nil
+}
+
+func protocolEvent(event Event) *ProtocolEvent {
+	return &ProtocolEvent{SchemaVersion: event.SchemaVersion, Epoch: event.Epoch, Revision: event.Revision, Session: event.Identity.Session, Pane: event.Identity.Pane, Source: event.Identity.Source, State: event.State, ProducerRevision: event.ProducerRevision}
+}
+func ownedByCurrentUser(info os.FileInfo) bool {
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	return ok && int(stat.Uid) == os.Getuid()
+}
+
+func sameInode(first, second os.FileInfo) bool {
+	a, aOK := first.Sys().(*syscall.Stat_t)
+	b, bOK := second.Sys().(*syscall.Stat_t)
+	return aOK && bOK && a.Dev == b.Dev && a.Ino == b.Ino
 }
 
 func strictJSON(line []byte) error {
