@@ -1,10 +1,15 @@
 package runtime
 
 import (
+	"bufio"
 	"encoding/json"
+	"net"
 	"os"
+	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -59,6 +64,7 @@ func TestApplyEventRejectsInvalidStateAndIdentity(t *testing.T) {
 		}
 	}
 }
+
 func TestApplyEventReplacesExistingPaneState(t *testing.T) {
 	base := Snapshot{SchemaVersion: SchemaVersion, Epoch: "epoch", Revision: 1, Panes: []Pane{{Session: "work", Pane: "%1", State: "running"}}}
 	got, err := ApplyEvent(base, Event{SchemaVersion: SchemaVersion, Epoch: "epoch", Revision: 2, Identity: Identity{Session: "work", Pane: "%1", Source: "agent"}, State: "error"})
@@ -66,7 +72,6 @@ func TestApplyEventReplacesExistingPaneState(t *testing.T) {
 		t.Fatalf("ApplyEvent() = %#v, %v", got, err)
 	}
 }
-
 func TestImportV1PreservesRecordTokens(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(root+"/panes", 0700); err != nil {
@@ -223,4 +228,180 @@ func TestOwnerSubscribeReplaysThenStreamsOnce(t *testing.T) {
 			t.Fatalf("cursor %#v accepted", cursor)
 		}
 	}
+}
+func TestListenSocketRejectsUnsafeEndpointsAndCleansOnlyOwnedInode(t *testing.T) {
+	root := socketRoot(t)
+	unsafe := filepath.Join(root, "unsafe")
+	if err := os.Mkdir(unsafe, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := ListenSocket(root, filepath.Join(unsafe, "runtime.sock")); err == nil {
+		t.Fatal("ListenSocket accepted a permissive parent")
+	}
+	secure := filepath.Join(root, "secure")
+	if err := os.Mkdir(secure, 0700); err != nil {
+		t.Fatal(err)
+	}
+	endpoint := filepath.Join(secure, "runtime.sock")
+	mustWrite(t, endpoint, "file")
+	if _, _, err := ListenSocket(root, endpoint); err == nil {
+		t.Fatal("ListenSocket overwrote a regular file")
+	}
+	if err := os.Remove(endpoint); err != nil {
+		t.Fatal(err)
+	}
+	_, cleanup, err := ListenSocket(root, endpoint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info, err := os.Lstat(endpoint); err != nil || info.Mode().Perm() != 0600 {
+		t.Fatalf("created socket mode = %v, %v; want 0600", info.Mode(), err)
+	}
+	cleanup()
+	if _, err := os.Lstat(endpoint); !os.IsNotExist(err) {
+		t.Fatalf("cleanup retained owned socket: %v", err)
+	}
+	_, cleanup, err = ListenSocket(root, endpoint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(endpoint); err != nil {
+		t.Fatal(err)
+	}
+	mustWrite(t, endpoint, "replacement")
+	cleanup()
+	if _, err := os.Stat(endpoint); err != nil {
+		t.Fatalf("cleanup removed replacement endpoint: %v", err)
+	}
+	if _, _, err := ListenSocket(root, filepath.Join(t.TempDir(), "runtime.sock")); err == nil {
+		t.Fatal("ListenSocket accepted endpoint outside root")
+	}
+	if err := os.Symlink(t.TempDir(), filepath.Join(root, "linked")); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := ListenSocket(root, filepath.Join(root, "linked", "runtime.sock")); err == nil {
+		t.Fatal("ListenSocket accepted symlinked ancestor")
+	}
+}
+func TestServeSocketSerializesConcurrentPublishAndSnapshot(t *testing.T) {
+	root := socketRoot(t)
+	listener, cleanup, err := ListenSocket(root, filepath.Join(root, "runtime.sock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	owner := NewOwner(Snapshot{SchemaVersion: SchemaVersion})
+	defer owner.Close()
+	go ServeSocket(listener, owner)
+	var group sync.WaitGroup
+	for revision, pane := range []string{"p1", "p2"} {
+		group.Add(1)
+		go func(pane string) {
+			defer group.Done()
+			publishSocketEvent(t, listener, pane, revision+1)
+		}(pane)
+	}
+	group.Wait()
+	if snapshot := socketResponse(t, listener, `{"op":"snapshot"}`+"\n").Snapshot; snapshot.Revision != 2 || len(snapshot.Panes) != 2 {
+		t.Fatalf("snapshot = %#v", snapshot)
+	}
+}
+func TestServeSocketProvesConcurrentSnapshotSubscriptionAndSlowDisconnect(t *testing.T) {
+	root := socketRoot(t)
+	listener, cleanup, err := ListenSocket(root, filepath.Join(root, "runtime.sock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	owner := NewOwner(Snapshot{SchemaVersion: SchemaVersion})
+	defer owner.Close()
+	go ServeSocket(listener, owner)
+	state := socketResponse(t, listener, `{"op":"snapshot"}`+"\n").Snapshot
+	publishSocketEvent(t, listener, "slow", 1)
+	subscriber, err := net.Dial("unix", listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer subscriber.Close()
+	if _, err := subscriber.Write([]byte(`{"op":"subscribe","cursor":{"epoch":"` + state.Epoch + `","revision":0}}` + "\n")); err != nil {
+		t.Fatal(err)
+	}
+	reader := bufio.NewReader(subscriber)
+	if replay, err := socketResponseReader(reader); err != nil || replay.Event == nil || replay.Event.Revision != 1 || replay.Event.ProducerRevision != 1 {
+		t.Fatalf("subscribe replay = %#v, %v", replay, err)
+	}
+	publishSocketEvent(t, listener, "slow", 2)
+	if live, err := socketResponseReader(reader); err != nil || live.Event == nil || live.Event.Revision != 2 || live.Event.ProducerRevision != 2 {
+		t.Fatalf("subscribe live event = %#v, %v", live, err)
+	}
+	publisher, err := net.Dial("unix", listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := publisher.Write([]byte(`{"op":"publish","event":{"schema_version":2,"session":"work","pane":"slow","source":"agent","state":"running","producer_revision":3}}` + "\n")); err != nil {
+		t.Fatal(err)
+	}
+	if published, err := socketResponseReader(reader); err != nil || published.Event == nil || published.Event.Revision != 3 || published.Event.ProducerRevision != 3 {
+		t.Fatalf("concurrent socket publication = %#v, %v", published, err)
+	}
+	snapshot := socketResponse(t, listener, `{"op":"snapshot"}`+"\n")
+	if snapshot.Type != "snapshot" || snapshot.Snapshot.Epoch != state.Epoch || snapshot.Snapshot.Revision != 3 {
+		t.Fatalf("concurrent socket snapshot = %#v", snapshot)
+	}
+	if ack, err := socketResponseReader(bufio.NewReader(publisher)); err != nil || ack.Type != "ack" || ack.Snapshot.Revision != 3 {
+		t.Fatalf("concurrent socket publish = %#v, %v", ack, err)
+	}
+	for i := 4; i <= 2000; i++ {
+		publishSocketEvent(t, listener, "slow", i)
+	}
+	if healthy := socketResponse(t, listener, `{"op":"snapshot"}`+"\n"); healthy.Type != "snapshot" || healthy.Snapshot.Revision != 2000 {
+		t.Fatalf("healthy socket snapshot = %#v", healthy)
+	}
+	_ = subscriber.SetReadDeadline(time.Now().Add(3 * time.Second))
+	for {
+		if _, err := reader.ReadBytes('\n'); err != nil {
+			if timeout, ok := err.(net.Error); ok && timeout.Timeout() {
+				t.Fatal("slow socket subscriber was not disconnected")
+			}
+			break
+		}
+	}
+}
+func publishSocketEvent(t *testing.T, listener *net.UnixListener, pane string, revision int) {
+	t.Helper()
+	frame := `{"op":"publish","event":{"schema_version":2,"session":"work","pane":"` + pane + `","source":"agent","state":"running","producer_revision":` + strconv.Itoa(revision) + `}}` + "\n"
+	if response := socketResponse(t, listener, frame); response.Type != "ack" {
+		t.Fatalf("publish response = %#v", response)
+	}
+}
+func socketResponse(t *testing.T, listener *net.UnixListener, frame string) Response {
+	t.Helper()
+	connection, err := net.Dial("unix", listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer connection.Close()
+	if _, err := connection.Write([]byte(frame)); err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := socketResponseReader(bufio.NewReader(connection))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return decoded
+}
+func socketResponseReader(reader *bufio.Reader) (decoded Response, err error) {
+	response, err := reader.ReadBytes('\n')
+	if err == nil {
+		err = json.Unmarshal(response, &decoded)
+	}
+	return decoded, err
+}
+func socketRoot(t *testing.T) string {
+	root := filepath.Join("/tmp", "as-"+strconv.Itoa(os.Getpid()))
+	if err := os.MkdirAll(root, 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	return root
 }
