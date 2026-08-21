@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bufio"
 	"context"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -109,6 +111,86 @@ func TestServeRejectsPermissiveSocketDirectoryWithoutChangingMode(t *testing.T) 
 			}
 			if info.Mode().Perm() != mode {
 				t.Fatalf("socket directory mode = %o, want %o", info.Mode().Perm(), mode)
+			}
+		})
+	}
+}
+
+func TestSocketClientRejectsUnsafeEndpointBeforeDialing(t *testing.T) {
+	runtimeDir := shortRuntimeDir(t)
+	target := shortRuntimeDir(t)
+	if err := os.Symlink(target, filepath.Join(runtimeDir, "agent-status")); err != nil {
+		t.Fatal(err)
+	}
+	listener, err := net.Listen("unix", filepath.Join(target, "agent-status.sock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	accepted := make(chan struct{}, 1)
+	go func() {
+		connection, err := listener.Accept()
+		if err == nil {
+			accepted <- struct{}{}
+			_ = connection.Close()
+		}
+	}()
+	t.Setenv("XDG_RUNTIME_DIR", runtimeDir)
+	if exit := socketSnapshot(io.Discard); exit != 1 {
+		t.Fatalf("socket snapshot exit = %d, want invalid", exit)
+	}
+	select {
+	case <-accepted:
+		t.Fatal("client dialed a symlinked runtime endpoint")
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func TestSocketClientRequiresOperationSpecificStrictResponse(t *testing.T) {
+	validSnapshot := `{"schema_version":2,"epoch":"epoch","revision":0,"panes":[],"sessions":[]}`
+	for _, test := range []struct {
+		name, operation, response string
+		want                      int
+	}{
+		{"snapshot", "snapshot", `{"type":"snapshot","snapshot":` + validSnapshot + "}\n", 0},
+		{"snapshot-rejects-ack", "snapshot", `{"type":"ack","snapshot":` + validSnapshot + "}\n", 1},
+		{"publish", "publish", `{"type":"ack","snapshot":` + validSnapshot + "}\n", 0},
+		{"publish-rejects-snapshot", "publish", `{"type":"snapshot","snapshot":` + validSnapshot + "}\n", 1},
+		{"unknown-field", "snapshot", `{"type":"snapshot","snapshot":` + validSnapshot + `,"extra":true}` + "\n", 1},
+		{"duplicate-field", "snapshot", `{"type":"snapshot","type":"snapshot","snapshot":` + validSnapshot + "}\n", 1},
+		{"malformed", "snapshot", "not-json\n", 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			runtimeDir := shortRuntimeDir(t)
+			endpoint := filepath.Join(runtimeDir, "agent-status", "agent-status.sock")
+			if err := os.Mkdir(filepath.Dir(endpoint), 0700); err != nil {
+				t.Fatal(err)
+			}
+			listener, err := net.Listen("unix", endpoint)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Chmod(endpoint, 0600); err != nil {
+				t.Fatal(err)
+			}
+			defer listener.Close()
+			go func() {
+				connection, err := listener.Accept()
+				if err == nil {
+					_, _ = bufio.NewReader(connection).ReadBytes('\n')
+					_, _ = connection.Write([]byte(test.response))
+					_ = connection.Close()
+				}
+			}()
+			t.Setenv("XDG_RUNTIME_DIR", runtimeDir)
+			var exit int
+			if test.operation == "publish" {
+				exit = publish(options{session: "session", pane: "pane", source: "source", state: "idle"}, io.Discard)
+			} else {
+				exit = socketSnapshot(io.Discard)
+			}
+			if exit != test.want {
+				t.Fatalf("%s exit = %d, want %d", test.operation, exit, test.want)
 			}
 		})
 	}
