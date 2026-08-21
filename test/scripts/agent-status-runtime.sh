@@ -117,6 +117,29 @@ if [[ "${1:-core}" == "integration" ]]; then
   run env XDG_RUNTIME_DIR="$runtime_dir" "$BIN" socket-snapshot --root "$TMP/state"
   check 0 "$status" 'socket snapshot exits successfully'
   contains '"type":"snapshot"' "$(<"$TMP/stdout")" 'socket snapshot returns daemon response'
+  run env AGENT_STATUS_CONFIG="$TMP/missing.conf" AGENT_STATUS_STATE_DIR="$TMP/state" AGENT_STATUS_NOW=100 \
+    AGENT_STATUS_RUNTIME_ENABLED=1 AGENT_STATUS_RUNTIME_PATH="$BIN" XDG_RUNTIME_DIR="$runtime_dir" \
+    AGENT_STATUS_PANE_SNAPSHOT=$'work\t0\tmain\t%1\tbash\tmain\t/tmp\tbash\t1' \
+    "$ROOT/scripts/agent-status.sh" runtime-snapshot
+  check 0 "$status" 'public runtime snapshot exits successfully'
+  runtime_snapshot_output="$(<"$TMP/stdout")"
+  if [[ "$runtime_snapshot_output" == *'__agent_status_daemon__'* ]]; then
+    printf 'FAIL: public runtime snapshot leaked daemon sentinel\n' >&2
+    fail=1
+  fi
+  run python3 - "$runtime_snapshot_output" <<'PY'
+import json
+import sys
+
+snapshot = json.loads(sys.argv[1])
+panes = [pane for pane in snapshot.get("panes", []) if pane.get("session") == "work" and pane.get("pane") == "_1"]
+if len(panes) != 1:
+    raise ValueError("expected one synthetic work pane")
+pane = panes[0]
+print(f'{pane.get("state")}\t{str(bool(snapshot.get("epoch"))).lower()}\t{str(bool(pane.get("token"))).lower()}')
+PY
+  check 0 "$status" 'public runtime snapshot emits exactly one valid JSON document'
+  check $'running\ttrue\ttrue' "$(<"$TMP/stdout")" 'public runtime snapshot preserves state, epoch, and provenance'
   run env XDG_RUNTIME_DIR="$runtime_dir" "$BIN" publish --root "$TMP/state" --session oldest --pane _7 --source harness --state error --producer-revision 2
   check 0 "$status" 'socket publish exits successfully'
   contains '"type":"ack"' "$(<"$TMP/stdout")" 'socket publish returns acknowledgement'
