@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 
 	runtime "github.com/rafaelraba/dotfiles/agent-status-runtime"
 )
@@ -27,6 +29,8 @@ func main() {
 		os.Exit(runtime.ExitInvalid)
 	}
 	switch os.Args[1] {
+	case "serve":
+		os.Exit(serve(options, os.Stderr))
 	case "snapshot":
 		os.Exit(snapshot(options, os.Stdout, os.Stderr))
 	case "validate":
@@ -36,6 +40,72 @@ func main() {
 	default:
 		os.Exit(runtime.ExitInvalid)
 	}
+}
+
+func serve(o options, stderr io.Writer) int {
+	state, exit := importState(o, stderr)
+	if exit == runtime.ExitInvalid {
+		return exit
+	}
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGTERM, os.Interrupt)
+	defer signal.Stop(signals)
+	base, err := socketBase()
+	if err != nil {
+		return runtime.ExitInvalid
+	}
+	listener, cleanup, err := runtime.ListenSocket(base, filepath.Join(base, "agent-status.sock"))
+	if err != nil {
+		return runtime.ExitInvalid
+	}
+	defer cleanup()
+	owner := runtime.NewOwner(state)
+	defer owner.Close()
+	stopped := make(chan struct{})
+	go func() {
+		runtime.ServeSocket(listener, owner)
+		close(stopped)
+	}()
+	select {
+	case <-signals:
+		return runtime.ExitComplete
+	case <-stopped:
+		return runtime.ExitInvalid
+	}
+}
+
+func socketBase() (string, error) {
+	runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
+	if runtimeDir == "" {
+		runtimeDir = os.Getenv("XDG_CACHE_HOME")
+	}
+	if runtimeDir == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		runtimeDir = filepath.Join(home, ".cache")
+	}
+	base := filepath.Join(runtimeDir, "agent-status")
+	info, err := os.Lstat(base)
+	if os.IsNotExist(err) {
+		if err := os.Mkdir(base, 0700); err != nil {
+			return "", err
+		}
+		info, err = os.Lstat(base)
+	}
+	if err != nil {
+		return "", err
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm() != 0700 || !ownedByCurrentUser(info) {
+		return "", fmt.Errorf("unsafe socket directory")
+	}
+	return base, nil
+}
+
+func ownedByCurrentUser(info os.FileInfo) bool {
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	return ok && int(stat.Uid) == os.Getuid()
 }
 
 func parseOptions(args []string) (options, error) {
