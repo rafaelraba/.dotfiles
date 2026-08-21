@@ -28,6 +28,27 @@ store_path() {
   [[ -n "$pane" ]] && pane_file "$session" "$pane" || status_file "$session"
 }
 
+store_dirty_path() {
+  printf '%s/.runtime-dirty/%s' "$STATUS_DIR" "$(basename "$1")"
+}
+
+store_mark_dirty() {
+  local path="$1" token="$2" marker
+  marker="$(store_dirty_path "$path")"
+  mkdir -p "$(dirname "$marker")"
+  printf '%s\n' "$token" >"$marker"
+}
+
+store_clear_dirty_if_matching() {
+  local path="$1" token="$2" marker
+  marker="$(store_dirty_path "$path")"
+  [[ -f "$marker" && "$(<"$marker")" == "$token" ]] && rm -f "$marker"
+}
+
+store_has_dirty_markers() {
+  [[ -d "$STATUS_DIR/.runtime-dirty" ]] && find "$STATUS_DIR/.runtime-dirty" -type f -print -quit | grep -q .
+}
+
 # One render-local tmux view. Callers may pass this output through
 # AGENT_STATUS_PANE_SNAPSHOT rather than repeatedly asking tmux for panes.
 store_bulk_snapshot() {
@@ -100,6 +121,7 @@ store_set() {
     return 2
   fi
   now="$(store_now)"
+  [[ "${AGENT_STATUS_RUNTIME_ENABLED:-0}" == 1 ]] && store_mark_dirty "$path" "$event"
   tmp="$(mktemp "${path}.tmp.XXXXXX")"
   printf '1\t%s\t%s\t%s\t%s\n' "$state" "$now" "$source" "$event" >"$tmp"
   mv -f "$tmp" "$path"

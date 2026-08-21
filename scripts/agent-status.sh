@@ -165,14 +165,43 @@ aggregate_session_summary() {
 }
 
 agent_status_runtime_snapshot() {
-	local runtime_path now
-	[[ "${AGENT_STATUS_RUNTIME_ENABLED:-1}" != "0" ]] || return 1
+	local runtime_path now snapshot
+	[[ "${AGENT_STATUS_RUNTIME_ENABLED:-0}" == "1" ]] || return 1
 	runtime_path="${AGENT_STATUS_RUNTIME_PATH:-$ROOT/agent-status-runtime/bin/agent-status-runtime}"
 	[[ "$runtime_path" = /* && -x "$runtime_path" ]] || return 1
 	now="$(store_now)"
-	python3 - "$runtime_path" "$STATUS_DIR" "$now" <<'PY'
+	snapshot="$(AGENT_STATUS_RUNTIME_DIRTY="$(store_has_dirty_markers && printf 1 || true)" AGENT_STATUS_RUNTIME_INVENTORY="$(store_bulk_snapshot)" python3 - "$runtime_path" "$STATUS_DIR" "$now" <<'PY'
 import subprocess
 import sys
+import os
+import re
+
+def run(command):
+    try:
+        completed = subprocess.run(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            timeout=1.0,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return b""
+    return completed.stdout if completed.returncode == 0 and len(completed.stdout) <= 65536 else b""
+
+daemon = b"" if __import__("os").environ.get("AGENT_STATUS_RUNTIME_DIRTY") else run([sys.argv[1], "socket-snapshot", "--root", sys.argv[2], "--now", sys.argv[3]])
+if daemon:
+    try:
+        import json
+        snapshot = json.loads(daemon)
+        inventory = {(row.split("\t")[0], re.sub(r"[^A-Za-z0-9_.-]", "_", row.split("\t")[3])) for row in os.environ["AGENT_STATUS_RUNTIME_INVENTORY"].splitlines() if len(row.split("\t")) >= 4}
+        candidate = snapshot.get("snapshot")
+        if snapshot.get("type") == "snapshot" and isinstance(candidate, dict) and candidate.get("schema_version") == 2 and isinstance(candidate.get("panes"), list) and all(isinstance(pane, dict) and (pane.get("session"), pane.get("pane")) in inventory for pane in candidate["panes"]):
+            print("__agent_status_daemon__")
+            sys.stdout.buffer.write(json.dumps(candidate, separators=(",", ":")).encode() + b"\n")
+            sys.exit(0)
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+        pass
 
 try:
     completed = subprocess.run(
@@ -189,6 +218,22 @@ if completed.returncode != 0 or len(completed.stdout) > 65536:
     sys.exit(1)
 sys.stdout.buffer.write(completed.stdout)
 PY
+)" || return 1
+	if [[ "$snapshot" == __agent_status_daemon__$'\n'* ]]; then
+		snapshot="${snapshot#*$'\n'}"
+		store_has_dirty_markers && AGENT_STATUS_RUNTIME_RETRY=1 agent_status_runtime_snapshot && return
+	fi
+	printf '%s\n' "$snapshot"
+}
+
+agent_status_runtime_publish() {
+	local state="$1" session="$2" pane="$3" source="$4" token="$5" path runtime_path
+	[[ "${AGENT_STATUS_RUNTIME_ENABLED:-0}" == "1" ]] || return 1
+	runtime_path="${AGENT_STATUS_RUNTIME_PATH:-$ROOT/agent-status-runtime/bin/agent-status-runtime}"
+	[[ "$runtime_path" = /* && -x "$runtime_path" ]] || return 1
+	path="$(store_path "$session" "$pane")"
+	"$runtime_path" publish --root "$STATUS_DIR" --session "$session" --pane "${pane//%/_}" --source "$source" --state "$state" --producer-revision "$token" 2>/dev/null | grep -q '"type":"ack"' || return 1
+	store_clear_dirty_if_matching "$path" "$token"
 }
 
 command="${1:-}"
@@ -201,6 +246,7 @@ set)
 	session="$(resolve_session "${1:-}")"
 	pane="$(resolve_pane "${2:-}")"
 	if store_set "$state" "$session" "$pane" "${3:-unknown}" "${4:-0}"; then
+		agent_status_runtime_publish "$(store_normalize "$state")" "$session" "$pane" "${3:-unknown}" "${4:-0}" || true
 		notify_transition "$(store_normalize "$state")" "$session" "$pane" || true
 	else
 		[[ $? == 2 ]] || exit 1
