@@ -197,8 +197,7 @@ if daemon:
         inventory = {(row.split("\t")[0], re.sub(r"[^A-Za-z0-9_.-]", "_", row.split("\t")[3])) for row in os.environ["AGENT_STATUS_RUNTIME_INVENTORY"].splitlines() if len(row.split("\t")) >= 4}
         candidate = snapshot.get("snapshot")
         if snapshot.get("type") == "snapshot" and isinstance(candidate, dict) and candidate.get("schema_version") == 2 and isinstance(candidate.get("panes"), list) and all(isinstance(pane, dict) and (pane.get("session"), pane.get("pane")) in inventory for pane in candidate["panes"]):
-            print("__agent_status_daemon__")
-            sys.stdout.buffer.write(json.dumps(candidate, separators=(",", ":")).encode() + b"\n")
+            sys.stdout.buffer.write(b"__agent_status_daemon__\n" + json.dumps(candidate, separators=(",", ":")).encode() + b"\n")
             sys.exit(0)
     except (KeyError, TypeError, ValueError, json.JSONDecodeError):
         pass
