@@ -4,7 +4,7 @@
 
 current="$1"
 bar_bg="#0b0f1a"
-max_visible_sessions=3
+max_visible_sessions=5
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=agent-status/config.sh
 source "$ROOT/agent-status/config.sh"
