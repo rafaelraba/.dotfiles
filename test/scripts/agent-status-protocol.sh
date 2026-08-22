@@ -246,7 +246,7 @@ other_tab="$(render_tab middle)"
 check_contains '+2' "$single_tab" 'five visible tabs collapse only remaining sessions'
 check_contains '#[bg=#a6da95,fg=#0b0f1a,bold] 1 ' "$single_tab" 'active tab appends state-colored first position'
 check_contains '#[bg=#6c8f91,fg=#0b0f1a,bold] 2 ' "$single_tab" 'idle tab uses its distinct stable-position badge color'
-check_contains '#[bg=#363a4f,fg=#ffffff,bold] oldest ' "$single_tab" 'current tab keeps distinct dark name segment'
+check_contains '#[bg=#494d64,fg=#ffffff,bold] oldest ' "$single_tab" 'current tab keeps distinct brighter neutral name segment'
 check_contains '[✓ oldest 1]' "$(NO_COLOR=1 render_tab oldest)" 'no-color tab keeps distinct marker and position'
 
 # A newly created current session beyond capacity replaces only the final slot.
@@ -256,7 +256,7 @@ check_contains 'middle' "$newest_current" 'newest current keeps second ordered s
 check_contains 'newest' "$newest_current" 'newest current keeps third ordered session visible'
 check_contains 'latest' "$newest_current" 'newest current keeps fourth ordered session visible'
 [[ "$newest_current" != *'fifth'* && "$newest_current" != *'sixth'* ]] || fail=1
-check_contains '#[bg=#363a4f,fg=#ffffff,bold] seventh ' "$newest_current" 'newest current session remains a full visible tab'
+check_contains '#[bg=#494d64,fg=#ffffff,bold] seventh ' "$newest_current" 'newest current session remains a full visible tab'
 check_contains '#[bg=#6c8f91,fg=#0b0f1a,bold] 7 ' "$newest_current" 'idle newest current tab retains its distinct badge color and ordered number'
 check_contains '+2' "$newest_current" 'overflow counts only the omitted sessions'
 check_contains '[· seventh 7]' "$(NO_COLOR=1 render_tab seventh)" 'no-color newest current tab retains its number'

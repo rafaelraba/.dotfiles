@@ -132,7 +132,7 @@ render_session_tab() {
 	color="$(status_bg "$state")"
 
 	if [ "$is_current" = "true" ]; then
-		echo -n " #[bg=$bar_bg,fg=#363a4f]#[bg=#363a4f,fg=#ffffff,bold] $session #[bg=$color,fg=#0b0f1a,bold] $tab_number #[bg=$bar_bg,fg=$color]"
+		echo -n " #[bg=$bar_bg,fg=#494d64]#[bg=#494d64,fg=#ffffff,bold] $session #[bg=$color,fg=#0b0f1a,bold] $tab_number #[bg=$bar_bg,fg=$color]"
 		return
 	fi
 

@@ -182,6 +182,7 @@ check_contains "#{m:_*,#{session_name}}" "$(grep 'bind S' "$ROOT/editors/tmux/tm
 check_contains 'tmux-internal-session.sh --configure #{q:session_name}' "$(grep -A 4 '^set-hook -g session-created' "$ROOT/editors/tmux/tmux.conf")" 'floating session creation hook applies internal options'
 check_contains 'set-hook -g client-attached' "$(cat "$ROOT/editors/tmux/tmux.conf")" 'attaching to an existing floating session reapplies internal options'
 check_contains 'set-hook -g client-session-changed' "$(cat "$ROOT/editors/tmux/tmux.conf")" 'switching into an existing floating session reapplies internal options'
+check_contains 'tmux refresh-client -S -t #{q:hook_client}' "$(grep -A 5 '^set-hook -g client-session-changed' "$ROOT/editors/tmux/tmux.conf")" 'changing sessions refreshes the invoking client status immediately'
 check_contains "tmux-internal-session.sh --configure-existing" "$(cat "$ROOT/editors/tmux/tmux.conf")" 'config reload repairs existing floating sessions'
 check_contains "bind w choose-tree -Zw -f '#{?#{m:_*,#{session_name}},0,1}'" "$(cat "$ROOT/editors/tmux/tmux.conf")" 'native session tree excludes floating sessions'
 check_contains "bind D choose-client -Z -f '#{?#{m:_*,#{session_name}},0,1}'" "$(cat "$ROOT/editors/tmux/tmux.conf")" 'native client picker excludes clients in floating sessions'
