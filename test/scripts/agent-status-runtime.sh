@@ -106,6 +106,7 @@ if [[ "${1:-core}" == "integration" ]]; then
   default_runtime_enabled="$(AGENT_STATUS_CONFIG="$TMP/missing.conf" bash -c 'source "$1"; agent_status_load_config; printf %s "$AGENT_STATUS_RUNTIME_ENABLED"' _ "$ROOT/scripts/agent-status/config.sh")"
   check 0 "$default_runtime_enabled" 'runtime is disabled by default'
   rm -f "$TMP/state/panes/bad"
+  printf '1\terror\t100\topencode\t2\n' >"$TMP/state/panes/work__9"
   runtime_dir="$(mktemp -d /tmp/as-runtime.XXXXXX)"
   trap 'kill "$serve_pid" 2>/dev/null || true; wait "$serve_pid" 2>/dev/null || true; rm -rf "$TMP" "$runtime_dir"' EXIT
   env XDG_RUNTIME_DIR="$runtime_dir" "$BIN" serve --root "$TMP/state" --now 100 >"$TMP/serve.stdout" 2>"$TMP/serve.stderr" &
@@ -133,13 +134,16 @@ import sys
 
 snapshot = json.loads(sys.argv[1])
 panes = [pane for pane in snapshot.get("panes", []) if pane.get("session") == "work" and pane.get("pane") == "_1"]
-if len(panes) != 1:
+if len(panes) != 1 or len(snapshot.get("panes", [])) != 1:
     raise ValueError("expected one synthetic work pane")
 pane = panes[0]
-print(f'{pane.get("state")}\t{str(bool(snapshot.get("epoch"))).lower()}\t{str(bool(pane.get("token"))).lower()}')
+sessions = snapshot.get("sessions", [])
+if len(sessions) != 1 or sessions[0].get("name") != "work":
+    raise ValueError("expected one synthetic work session")
+print(f'{pane.get("state")}\t{sessions[0].get("state")}\t{str(bool(snapshot.get("epoch"))).lower()}\t{str(bool(pane.get("token"))).lower()}')
 PY
   check 0 "$status" 'public runtime snapshot emits exactly one valid JSON document'
-  check $'running\ttrue\ttrue' "$(<"$TMP/stdout")" 'public runtime snapshot preserves state, epoch, and provenance'
+  check $'running\trunning\ttrue\ttrue' "$(<"$TMP/stdout")" 'public runtime snapshot ignores historical errors and preserves daemon provenance'
   run env XDG_RUNTIME_DIR="$runtime_dir" "$BIN" publish --root "$TMP/state" --session oldest --pane _7 --source harness --state error --producer-revision 2
   check 0 "$status" 'socket publish exits successfully'
   contains '"type":"ack"' "$(<"$TMP/stdout")" 'socket publish returns acknowledgement'
@@ -203,11 +207,11 @@ EOF
   check $'publish\nsnapshot' "$(<"$TMP/dirty-render-args")" 'dirty marker skips daemon probe and invokes CLI snapshot'
   rm -rf "$TMP/render-state/.runtime-dirty"
 
-  invalid_inventory_runtime="$TMP/invalid-inventory-runtime"
-  write_runtime "$invalid_inventory_runtime" 'if [[ "$1" == publish ]]; then printf '\''{"type":"ack"}\n'\''; exit 0; fi; printf "%s\n" "$1" >>"$RUNTIME_ARG_LOG"; if [[ "$1" == socket-snapshot ]]; then printf '\''{"type":"snapshot","snapshot":{"schema_version":2,"epoch":"v1","revision":0,"panes":[{"session":"missing","pane":"_99","state":"done"}],"sessions":[]}}\n'\''; else printf '\''{"schema_version":2,"epoch":"v1","revision":0,"panes":[{"session":"oldest","pane":"_7","state":"idle"}],"sessions":[{"name":"oldest","state":"idle"}]}\n'\''; fi'
-  invalid_inventory_output="$(RUNTIME_ARG_LOG="$TMP/invalid-inventory-args" render_runtime_tab "$invalid_inventory_runtime")"
-  check "$baseline" "$invalid_inventory_output" 'invalid daemon inventory falls through to CLI then v1'
-  check $'socket-snapshot\nsnapshot' "$(<"$TMP/invalid-inventory-args")" 'invalid daemon inventory invokes CLI after daemon rejection'
+  malformed_historical_runtime="$TMP/malformed-historical-runtime"
+  write_runtime "$malformed_historical_runtime" 'if [[ "$1" == publish ]]; then printf '\''{"type":"ack"}\n'\''; exit 0; fi; printf "%s\n" "$1" >>"$RUNTIME_ARG_LOG"; if [[ "$1" == socket-snapshot ]]; then printf '\''{"type":"snapshot","snapshot":{"schema_version":2,"epoch":"v1","revision":0,"panes":[{"session":"missing","pane":"_99","state":"invalid"}],"sessions":[]}}\n'\''; else printf '\''{"schema_version":2,"epoch":"v1","revision":0,"panes":[{"session":"oldest","pane":"_7","state":"idle"}],"sessions":[{"name":"oldest","state":"idle"}]}\n'\''; fi'
+  malformed_historical_output="$(RUNTIME_ARG_LOG="$TMP/malformed-historical-args" render_runtime_tab "$malformed_historical_runtime")"
+  check "$baseline" "$malformed_historical_output" 'malformed historical daemon pane falls through to CLI then v1'
+  check $'socket-snapshot\nsnapshot' "$(<"$TMP/malformed-historical-args")" 'malformed historical daemon pane invokes CLI after daemon rejection'
 
   dirty_runtime="$TMP/dirty-runtime"
   write_runtime "$dirty_runtime" '[[ "$1" == publish ]] && exit 1; exit 1'

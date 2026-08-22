@@ -173,8 +173,73 @@ agent_status_runtime_snapshot() {
 	snapshot="$(AGENT_STATUS_RUNTIME_DIRTY="$(store_has_dirty_markers && printf 1 || true)" AGENT_STATUS_RUNTIME_INVENTORY="$(store_bulk_snapshot)" python3 - "$runtime_path" "$STATUS_DIR" "$now" <<'PY'
 import subprocess
 import sys
+import json
 import os
 import re
+
+VALID_STATES = {"running", "permission", "waiting_for_input", "blocked", "done", "idle", "error"}
+STATE_PRIORITY = {"error": 70, "permission": 60, "waiting_for_input": 50, "blocked": 40, "done": 30, "running": 20, "idle": 10}
+ID_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
+
+def require_record(record, required, allowed):
+    if not isinstance(record, dict) or not required <= record.keys() or not record.keys() <= allowed:
+        raise ValueError
+    if "token" in record and not isinstance(record["token"], str):
+        raise ValueError
+
+def aggregate(panes):
+    sessions = {}
+    for pane in panes:
+        if STATE_PRIORITY[pane["state"]] > STATE_PRIORITY.get(sessions.get(pane["session"]), 0):
+            sessions[pane["session"]] = pane["state"]
+    return sessions
+
+def filtered_candidate(response, inventory):
+    if not isinstance(response, dict) or set(response) != {"type", "snapshot"} or response["type"] != "snapshot":
+        raise ValueError
+    candidate = response["snapshot"]
+    if not isinstance(candidate, dict) or set(candidate) != {"schema_version", "epoch", "revision", "panes", "sessions"}:
+        raise ValueError
+    if candidate["schema_version"] != 2 or not isinstance(candidate["epoch"], str) or not candidate["epoch"]:
+        raise ValueError
+    if type(candidate["revision"]) is not int or candidate["revision"] < 0:
+        raise ValueError
+    if not isinstance(candidate["panes"], list) or not isinstance(candidate["sessions"], list):
+        raise ValueError
+
+    pane_identities = set()
+    for pane in candidate["panes"]:
+        require_record(pane, {"session", "pane", "state"}, {"session", "pane", "state", "token"})
+        identity = (pane["session"], pane["pane"])
+        if not all(isinstance(value, str) and ID_PATTERN.fullmatch(value) for value in identity):
+            raise ValueError
+        if pane["state"] not in VALID_STATES or identity in pane_identities:
+            raise ValueError
+        pane_identities.add(identity)
+
+    session_states = {}
+    session_records = {}
+    for session in candidate["sessions"]:
+        require_record(session, {"name", "state"}, {"name", "state", "token"})
+        if not isinstance(session["name"], str) or not ID_PATTERN.fullmatch(session["name"]):
+            raise ValueError
+        if session["state"] not in VALID_STATES or session["name"] in session_states:
+            raise ValueError
+        session_states[session["name"]] = session["state"]
+        session_records[session["name"]] = session
+    if session_states != aggregate(candidate["panes"]):
+        raise ValueError
+
+    panes = sorted((pane for pane in candidate["panes"] if (pane["session"], pane["pane"]) in inventory), key=lambda pane: (pane["session"], pane["pane"]))
+    live_states = aggregate(panes)
+    sessions = []
+    for name in sorted(live_states):
+        session = {"name": name, "state": live_states[name]}
+        source = session_records[name]
+        if source["state"] == session["state"] and "token" in source:
+            session["token"] = source["token"]
+        sessions.append(session)
+    return {**candidate, "panes": panes, "sessions": sessions}
 
 def run(command):
     try:
@@ -192,13 +257,11 @@ def run(command):
 daemon = b"" if __import__("os").environ.get("AGENT_STATUS_RUNTIME_DIRTY") else run([sys.argv[1], "socket-snapshot", "--root", sys.argv[2], "--now", sys.argv[3]])
 if daemon:
     try:
-        import json
-        snapshot = json.loads(daemon)
+        response = json.loads(daemon)
         inventory = {(row.split("\t")[0], re.sub(r"[^A-Za-z0-9_.-]", "_", row.split("\t")[3])) for row in os.environ["AGENT_STATUS_RUNTIME_INVENTORY"].splitlines() if len(row.split("\t")) >= 4}
-        candidate = snapshot.get("snapshot")
-        if snapshot.get("type") == "snapshot" and isinstance(candidate, dict) and candidate.get("schema_version") == 2 and isinstance(candidate.get("panes"), list) and all(isinstance(pane, dict) and (pane.get("session"), pane.get("pane")) in inventory for pane in candidate["panes"]):
-            sys.stdout.buffer.write(b"__agent_status_daemon__\n" + json.dumps(candidate, separators=(",", ":")).encode() + b"\n")
-            sys.exit(0)
+        candidate = filtered_candidate(response, inventory)
+        sys.stdout.buffer.write(b"__agent_status_daemon__\n" + json.dumps(candidate, separators=(",", ":")).encode() + b"\n")
+        sys.exit(0)
     except (KeyError, TypeError, ValueError, json.JSONDecodeError):
         pass
 
