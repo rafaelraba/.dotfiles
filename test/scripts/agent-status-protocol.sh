@@ -231,7 +231,7 @@ esac
 EOF
 chmod +x "$FAKE_BIN/tmux"
 render_tab() {
-  TMUX_LOG="$TMUX_LOG" PATH="$FAKE_BIN:$PATH" "$ROOT/scripts/status-sessions.sh" "$1"
+  AGENT_STATUS_RUNTIME_ENABLED=0 TMUX_LOG="$TMUX_LOG" PATH="$FAKE_BIN:$PATH" "$ROOT/scripts/status-sessions.sh" "$1"
 }
 
 "$SCRIPT" clear oldest

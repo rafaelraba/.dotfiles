@@ -183,6 +183,23 @@ func TestEncodeResponseProducesBoundedMachineReadableNDJSON(t *testing.T) {
 	}
 }
 
+func TestDecodeSnapshotStrictRejectsMalformedState(t *testing.T) {
+	valid := `{"schema_version":2,"epoch":"epoch","revision":1,"panes":[{"session":"work","pane":"p1","state":"running"}],"sessions":[{"name":"work","state":"running"}]}`
+	if _, err := DecodeSnapshotStrict([]byte(valid)); err != nil {
+		t.Fatalf("valid snapshot rejected: %v", err)
+	}
+	for _, malformed := range []string{
+		`{"schema_version":2,"epoch":"epoch","revision":1,"panes":null,"sessions":[]}`,
+		`{"schema_version":2,"epoch":"epoch","revision":1,"panes":[{"session":"work","pane":"p1","state":"running","extra":true}],"sessions":[{"name":"work","state":"running"}]}`,
+		`{"schema_version":2,"epoch":"epoch","revision":1,"panes":[{"session":"work","pane":"p1","state":"running"}],"sessions":[{"name":"work","state":"idle"}]}`,
+		`{"schema_version":2,"epoch":"epoch","revision":1,"panes":[{"session":"work","pane":"p1","state":"running"},{"session":"work","pane":"p1","state":"running"}],"sessions":[{"name":"work","state":"running"}]}`,
+	} {
+		if _, err := DecodeSnapshotStrict([]byte(malformed)); err == nil {
+			t.Fatalf("malformed snapshot accepted: %s", malformed)
+		}
+	}
+}
+
 func TestOwnerSubscribeReplaysThenStreamsOnce(t *testing.T) {
 	owner := NewOwner(Snapshot{SchemaVersion: SchemaVersion})
 	defer owner.Close()
@@ -282,6 +299,27 @@ func TestListenSocketRejectsUnsafeEndpointsAndCleansOnlyOwnedInode(t *testing.T)
 	if _, _, err := ListenSocket(root, filepath.Join(root, "linked", "runtime.sock")); err == nil {
 		t.Fatal("ListenSocket accepted symlinked ancestor")
 	}
+	staleEndpoint := filepath.Join(root, "stale.sock")
+	stale, _, err := ListenSocket(root, staleEndpoint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := stale.Close(); err != nil {
+		t.Fatal(err)
+	}
+	replacement, replacementCleanup, err := ListenSocket(root, staleEndpoint)
+	if err != nil {
+		t.Fatalf("ListenSocket did not reclaim stale owned socket: %v", err)
+	}
+	defer replacementCleanup()
+	if _, _, err := ListenSocket(root, staleEndpoint); err == nil {
+		t.Fatal("ListenSocket replaced an active socket")
+	}
+	if connection, err := net.Dial("unix", replacement.Addr().String()); err != nil {
+		t.Fatalf("active socket was disturbed: %v", err)
+	} else {
+		_ = connection.Close()
+	}
 }
 func TestServeSocketSerializesConcurrentPublishAndSnapshot(t *testing.T) {
 	root := socketRoot(t)
@@ -306,6 +344,33 @@ func TestServeSocketSerializesConcurrentPublishAndSnapshot(t *testing.T) {
 		t.Fatalf("snapshot = %#v", snapshot)
 	}
 }
+
+func TestServeSocketExpiresActiveStateAcrossSnapshotsWithoutRestart(t *testing.T) {
+	root := socketRoot(t)
+	listener, cleanup, err := ListenSocket(root, filepath.Join(root, "runtime.sock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	now := int64(100)
+	owner := NewLiveOwner(LiveState{
+		Snapshot: Snapshot{SchemaVersion: SchemaVersion, Panes: []Pane{{Session: "work", Pane: "p1", State: "running"}}},
+		expiries: []paneExpiry{{session: "work", pane: "p1", at: 101}},
+	}, Config{SchemaVersion: SchemaVersion, ActiveTTL: 1, TerminalTTL: 10}, func() int64 { return now })
+	defer owner.Close()
+	go ServeSocket(listener, owner)
+
+	first := socketResponse(t, listener, `{"op":"snapshot"}`+"\n").Snapshot
+	now = 102
+	second := socketResponse(t, listener, `{"op":"snapshot"}`+"\n").Snapshot
+	if first.Epoch == "" || first.Epoch != second.Epoch || first.Revision != second.Revision {
+		t.Fatalf("server identity changed across snapshots: first=%#v second=%#v", first, second)
+	}
+	if first.Panes[0].State != "running" || second.Panes[0].State != "idle" || second.Sessions[0].State != "idle" {
+		t.Fatalf("TTL snapshots = %#v then %#v", first, second)
+	}
+}
+
 func TestServeSocketProvesConcurrentSnapshotSubscriptionAndSlowDisconnect(t *testing.T) {
 	root := socketRoot(t)
 	listener, cleanup, err := ListenSocket(root, filepath.Join(root, "runtime.sock"))

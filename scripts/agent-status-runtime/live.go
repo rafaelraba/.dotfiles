@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"os"
@@ -63,18 +64,36 @@ type ProtocolEvent struct {
 }
 
 func NewOwner(imported Snapshot) *Owner {
+	return NewLiveOwner(LiveState{Snapshot: imported}, Config{SchemaVersion: SchemaVersion, ActiveTTL: 300, TerminalTTL: 3600}, func() int64 { return time.Now().Unix() })
+}
+
+func NewLiveOwner(imported LiveState, config Config, clock func() int64) *Owner {
 	epoch := make([]byte, 16)
 	if _, err := rand.Read(epoch); err != nil {
 		panic(err)
 	}
-	state := cloneSnapshot(imported)
+	state := cloneSnapshot(imported.Snapshot)
 	state.SchemaVersion = SchemaVersion
 	state.Epoch = hex.EncodeToString(epoch)
 	state.Revision = 0
 	deriveSessions(&state)
+	if state.Panes == nil {
+		state.Panes = []Pane{}
+	}
+	if state.Sessions == nil {
+		state.Sessions = []Session{}
+	}
+	expiries := map[paneIdentity]int64{}
+	for _, expiry := range imported.expiries {
+		expiries[paneIdentity{session: expiry.session, pane: expiry.pane}] = expiry.at
+	}
 	owner := &Owner{requests: make(chan ownerRequest), done: make(chan struct{})}
-	go owner.run(state)
+	go owner.run(state, expiries, config, clock)
 	return owner
+}
+
+type paneIdentity struct {
+	session, pane string
 }
 
 func (o *Owner) Publish(event Event) (Snapshot, error) {
@@ -110,13 +129,14 @@ func (o *Owner) request(event *Event) (Snapshot, error) {
 	return result.snapshot, result.err
 }
 
-func (o *Owner) run(state Snapshot) {
+func (o *Owner) run(state Snapshot, expiries map[paneIdentity]int64, config Config, clock func() int64) {
 	last, journal, subscribers := map[Identity]Event{}, []Event{}, map[chan Event]struct{}{}
 	for {
 		select {
 		case <-o.done:
 			return
 		case request := <-o.requests:
+			current := expiringSnapshot(state, expiries, clock())
 			if request.cursor != nil {
 				cursor := *request.cursor
 				if cursor.Epoch == "" || cursor.Epoch != state.Epoch || cursor.Revision > state.Revision || (len(journal) > 0 && cursor.Revision+1 < journal[0].Revision) {
@@ -139,22 +159,24 @@ func (o *Owner) run(state Snapshot) {
 				continue
 			}
 			if request.event == nil {
-				request.response <- ownerResponse{snapshot: cloneSnapshot(state)}
+				request.response <- ownerResponse{snapshot: current}
 				continue
 			}
 			event := *request.event
 			if event.State == "" || event.SchemaVersion != SchemaVersion || ValidateIdentity(event.Identity) != nil || validState(event.State) == "" || (event.Epoch != "" && event.Epoch != state.Epoch) {
-				request.response <- ownerResponse{snapshot: cloneSnapshot(state), err: configInvalid}
+				request.response <- ownerResponse{snapshot: current, err: configInvalid}
 				continue
 			}
 			if prior, found := last[event.Identity]; found && prior.State == event.State && prior.ProducerRevision == event.ProducerRevision {
-				request.response <- ownerResponse{snapshot: cloneSnapshot(state)}
+				request.response <- ownerResponse{snapshot: current}
 				continue
 			}
 			event.Epoch, event.Revision = state.Epoch, state.Revision+1
 			next, err := ApplyEvent(state, event)
 			if err == nil {
 				state, last[event.Identity] = next, event
+				now := clock()
+				expiries[paneIdentity{session: event.Identity.Session, pane: event.Identity.Pane}] = expiryAt(now, event.State, config)
 				journal = append(journal, event)
 				if len(journal) > 1000 {
 					journal = journal[1:]
@@ -168,9 +190,25 @@ func (o *Owner) run(state Snapshot) {
 					}
 				}
 			}
-			request.response <- ownerResponse{snapshot: cloneSnapshot(state), err: err}
+			request.response <- ownerResponse{snapshot: expiringSnapshot(state, expiries, clock()), err: err}
 		}
 	}
+}
+
+func expiringSnapshot(state Snapshot, expiries map[paneIdentity]int64, now int64) Snapshot {
+	result := cloneSnapshot(state)
+	changed := false
+	for index := range result.Panes {
+		expiresAt, found := expiries[paneIdentity{session: result.Panes[index].Session, pane: result.Panes[index].Pane}]
+		if found && result.Panes[index].State != "idle" && now > expiresAt {
+			result.Panes[index].State = "idle"
+			changed = true
+		}
+	}
+	if changed {
+		deriveSessions(&result)
+	}
+	return result
 }
 
 func DecodeRequest(frame []byte) (Request, error) {
@@ -228,6 +266,78 @@ func EncodeResponse(value Response) ([]byte, error) {
 	}
 	return append(encoded, '\n'), nil
 }
+
+func DecodeSnapshotStrict(encoded []byte) (Snapshot, error) {
+	if strictJSON(encoded) != nil {
+		return Snapshot{}, configInvalid
+	}
+	var raw map[string]json.RawMessage
+	if json.Unmarshal(encoded, &raw) != nil || !requiredFields(raw, "schema_version", "epoch", "revision", "panes", "sessions") || !onlyFields(raw, "schema_version", "epoch", "revision", "panes", "sessions") {
+		return Snapshot{}, configInvalid
+	}
+	var snapshot Snapshot
+	if json.Unmarshal(raw["schema_version"], &snapshot.SchemaVersion) != nil || snapshot.SchemaVersion != SchemaVersion || json.Unmarshal(raw["epoch"], &snapshot.Epoch) != nil || snapshot.Epoch == "" || json.Unmarshal(raw["revision"], &snapshot.Revision) != nil {
+		return Snapshot{}, configInvalid
+	}
+	var panes []json.RawMessage
+	var sessions []json.RawMessage
+	if !jsonArray(raw["panes"], &panes) || !jsonArray(raw["sessions"], &sessions) {
+		return Snapshot{}, configInvalid
+	}
+	paneIdentities := map[paneIdentity]struct{}{}
+	aggregated := map[string]string{}
+	for _, encodedPane := range panes {
+		var fields map[string]json.RawMessage
+		if json.Unmarshal(encodedPane, &fields) != nil || !requiredFields(fields, "session", "pane", "state") || !onlyFields(fields, "session", "pane", "state", "token") {
+			return Snapshot{}, configInvalid
+		}
+		var pane Pane
+		if json.Unmarshal(fields["session"], &pane.Session) != nil || json.Unmarshal(fields["pane"], &pane.Pane) != nil || json.Unmarshal(fields["state"], &pane.State) != nil || !validProtocolID(pane.Session) || !validProtocolID(pane.Pane) || validState(pane.State) == "" {
+			return Snapshot{}, configInvalid
+		}
+		if fields["token"] != nil && json.Unmarshal(fields["token"], &pane.Token) != nil {
+			return Snapshot{}, configInvalid
+		}
+		identity := paneIdentity{session: pane.Session, pane: pane.Pane}
+		if _, duplicate := paneIdentities[identity]; duplicate {
+			return Snapshot{}, configInvalid
+		}
+		paneIdentities[identity] = struct{}{}
+		if priority(pane.State) > priority(aggregated[pane.Session]) {
+			aggregated[pane.Session] = pane.State
+		}
+		snapshot.Panes = append(snapshot.Panes, pane)
+	}
+	seenSessions := map[string]struct{}{}
+	for _, encodedSession := range sessions {
+		var fields map[string]json.RawMessage
+		if json.Unmarshal(encodedSession, &fields) != nil || !requiredFields(fields, "name", "state") || !onlyFields(fields, "name", "state", "token") {
+			return Snapshot{}, configInvalid
+		}
+		var session Session
+		if json.Unmarshal(fields["name"], &session.Name) != nil || json.Unmarshal(fields["state"], &session.State) != nil || !validProtocolID(session.Name) || validState(session.State) == "" || aggregated[session.Name] != session.State {
+			return Snapshot{}, configInvalid
+		}
+		if fields["token"] != nil && json.Unmarshal(fields["token"], &session.Token) != nil {
+			return Snapshot{}, configInvalid
+		}
+		if _, duplicate := seenSessions[session.Name]; duplicate {
+			return Snapshot{}, configInvalid
+		}
+		seenSessions[session.Name] = struct{}{}
+		snapshot.Sessions = append(snapshot.Sessions, session)
+	}
+	if len(seenSessions) != len(aggregated) {
+		return Snapshot{}, configInvalid
+	}
+	return snapshot, nil
+}
+
+func jsonArray(encoded json.RawMessage, target *[]json.RawMessage) bool {
+	trimmed := bytes.TrimSpace(encoded)
+	return len(trimmed) > 0 && trimmed[0] == '[' && json.Unmarshal(trimmed, target) == nil
+}
+
 func ListenSocket(root, endpoint string) (*net.UnixListener, func(), error) {
 	if !filepath.IsAbs(root) || !filepath.IsAbs(endpoint) {
 		return nil, nil, configInvalid
@@ -239,7 +349,11 @@ func ListenSocket(root, endpoint string) (*net.UnixListener, func(), error) {
 	if err := secureSocketAncestors(root, filepath.Dir(relative)); err != nil {
 		return nil, nil, configInvalid
 	}
-	if _, err := os.Lstat(endpoint); err == nil || !os.IsNotExist(err) {
+	if _, err := os.Lstat(endpoint); err == nil {
+		if err := removeStaleSocket(endpoint); err != nil {
+			return nil, nil, configInvalid
+		}
+	} else if !os.IsNotExist(err) {
 		return nil, nil, configInvalid
 	}
 	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: endpoint, Net: "unix"})
@@ -269,6 +383,30 @@ func ListenSocket(root, endpoint string) (*net.UnixListener, func(), error) {
 	}
 	return listener, cleanup, nil
 }
+
+func removeStaleSocket(endpoint string) error {
+	created, err := os.Lstat(endpoint)
+	if err != nil || created.Mode()&os.ModeSocket == 0 || created.Mode().Perm() != 0600 || !ownedByCurrentUser(created) {
+		return configInvalid
+	}
+	connection, dialErr := net.DialTimeout("unix", endpoint, 100*time.Millisecond)
+	if dialErr == nil {
+		_ = connection.Close()
+		return configInvalid
+	}
+	if !errors.Is(dialErr, syscall.ECONNREFUSED) && !errors.Is(dialErr, syscall.ENOENT) {
+		return configInvalid
+	}
+	current, err := os.Lstat(endpoint)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil || !sameInode(created, current) {
+		return configInvalid
+	}
+	return os.Remove(endpoint)
+}
+
 func secureSocketAncestors(root, relative string) error {
 	path := root
 	for _, component := range append([]string{"."}, strings.Split(relative, string(filepath.Separator))...) {

@@ -10,9 +10,11 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sort"
 	"strings"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	runtime "github.com/rafaelraba/dotfiles/agent-status-runtime"
 )
@@ -45,6 +47,8 @@ func main() {
 		os.Exit(snapshot(options, os.Stdout, os.Stderr))
 	case "socket-snapshot":
 		os.Exit(socketSnapshot(os.Stdout))
+	case "socket-sessions":
+		os.Exit(socketSessions(os.Stdin, os.Stdout))
 	case "publish":
 		os.Exit(publish(options, os.Stdout))
 	case "validate":
@@ -57,7 +61,15 @@ func main() {
 }
 
 func serve(o options, stderr io.Writer) int {
-	state, exit := importState(o, stderr)
+	started := time.Now()
+	explicitNow := o.now != 0
+	if o.now == 0 {
+		o.now = started.Unix()
+	}
+	state, diagnostics, exit := runtime.ImportV1Live(o.root, o.config(), o.now)
+	for _, diagnostic := range diagnostics {
+		fmt.Fprintln(stderr, diagnostic)
+	}
 	if exit == runtime.ExitInvalid {
 		return exit
 	}
@@ -73,7 +85,11 @@ func serve(o options, stderr io.Writer) int {
 		return runtime.ExitInvalid
 	}
 	defer cleanup()
-	owner := runtime.NewOwner(state)
+	clock := func() int64 { return time.Now().Unix() }
+	if explicitNow {
+		clock = func() int64 { return o.now + int64(time.Since(started)/time.Second) }
+	}
+	owner := runtime.NewLiveOwner(state, o.config(), clock)
 	defer owner.Close()
 	stopped := make(chan struct{})
 	go func() {
@@ -133,26 +149,35 @@ func socketEndpoint() (string, error) {
 }
 
 func socketRequest(request any, stdout io.Writer) int {
+	response, _, exit := socketExchange(request)
+	if exit != runtime.ExitComplete {
+		return exit
+	}
+	_, _ = stdout.Write(response)
+	return runtime.ExitComplete
+}
+
+func socketExchange(request any) ([]byte, runtime.Snapshot, int) {
 	endpoint, err := safeSocketEndpoint()
 	if err != nil {
-		return runtime.ExitInvalid
+		return nil, runtime.Snapshot{}, runtime.ExitInvalid
 	}
 	connection, err := net.DialTimeout("unix", endpoint, time.Second)
 	if err != nil {
-		return runtime.ExitInvalid
+		return nil, runtime.Snapshot{}, runtime.ExitInvalid
 	}
 	defer connection.Close()
 	frame, err := json.Marshal(request)
 	if err != nil {
-		return runtime.ExitInvalid
+		return nil, runtime.Snapshot{}, runtime.ExitInvalid
 	}
 	_ = connection.SetDeadline(time.Now().Add(time.Second))
 	if _, err := connection.Write(append(frame, '\n')); err != nil {
-		return runtime.ExitInvalid
+		return nil, runtime.Snapshot{}, runtime.ExitInvalid
 	}
 	response, err := io.ReadAll(io.LimitReader(connection, 1<<20))
 	if err != nil || len(response) == 0 || len(response) >= 1<<20 || !strings.HasSuffix(string(response), "\n") {
-		return runtime.ExitInvalid
+		return nil, runtime.Snapshot{}, runtime.ExitInvalid
 	}
 	expected := "snapshot"
 	if _, ok := request.(struct {
@@ -161,11 +186,11 @@ func socketRequest(request any, stdout io.Writer) int {
 	}); ok {
 		expected = "ack"
 	}
-	if !strictSocketResponse(response, expected) {
-		return runtime.ExitInvalid
+	snapshot, valid := strictSocketResponse(response, expected)
+	if !valid {
+		return nil, runtime.Snapshot{}, runtime.ExitInvalid
 	}
-	_, _ = stdout.Write(response)
-	return runtime.ExitComplete
+	return response, snapshot, runtime.ExitComplete
 }
 
 func safeSocketEndpoint() (string, error) {
@@ -192,40 +217,109 @@ func ownedByCurrentUser(info os.FileInfo) bool {
 	return ok && int(stat.Uid) == os.Getuid()
 }
 
-func strictSocketResponse(response []byte, expected string) bool {
+func strictSocketResponse(response []byte, expected string) (runtime.Snapshot, bool) {
 	if bytes.Count(response, []byte("\n")) != 1 {
-		return false
+		return runtime.Snapshot{}, false
 	}
 	decoder := json.NewDecoder(bytes.NewReader(response))
 	token, err := decoder.Token()
 	if err != nil || token != json.Delim('{') {
-		return false
+		return runtime.Snapshot{}, false
 	}
 	fields := map[string]json.RawMessage{}
 	for decoder.More() {
 		key, err := decoder.Token()
 		name, ok := key.(string)
 		if err != nil || !ok || fields[name] != nil {
-			return false
+			return runtime.Snapshot{}, false
 		}
 		var value json.RawMessage
 		if err := decoder.Decode(&value); err != nil {
-			return false
+			return runtime.Snapshot{}, false
 		}
 		fields[name] = value
 	}
 	if token, err = decoder.Token(); err != nil || token != json.Delim('}') || decoder.Decode(&struct{}{}) != io.EOF || len(fields) != 2 {
-		return false
+		return runtime.Snapshot{}, false
 	}
 	var responseType string
-	var snapshot runtime.Snapshot
-	return json.Unmarshal(fields["type"], &responseType) == nil && responseType == expected && fields["snapshot"] != nil && json.Unmarshal(fields["snapshot"], &snapshot) == nil && runtime.ValidateSnapshot(snapshot) == nil
+	snapshot, snapshotErr := runtime.DecodeSnapshotStrict(fields["snapshot"])
+	return snapshot, json.Unmarshal(fields["type"], &responseType) == nil && responseType == expected && fields["snapshot"] != nil && snapshotErr == nil
 }
 
 func socketSnapshot(stdout io.Writer) int {
 	return socketRequest(struct {
 		Op string `json:"op"`
 	}{Op: "snapshot"}, stdout)
+}
+
+func socketSessions(stdin io.Reader, stdout io.Writer) int {
+	_, snapshot, exit := socketExchange(struct {
+		Op string `json:"op"`
+	}{Op: "snapshot"})
+	if exit != runtime.ExitComplete {
+		return exit
+	}
+	inventory, err := io.ReadAll(io.LimitReader(stdin, 1<<20+1))
+	if err != nil || len(inventory) > 1<<20 || !utf8.Valid(inventory) || bytes.IndexByte(inventory, 0) >= 0 {
+		return runtime.ExitInvalid
+	}
+	type paneKey struct{ session, pane string }
+	live := map[paneKey]struct{}{}
+	for _, row := range strings.Split(strings.TrimSuffix(string(inventory), "\n"), "\n") {
+		fields := strings.Split(row, "\t")
+		if len(fields) >= 4 {
+			live[paneKey{session: fields[0], pane: sanitizeProtocolID(fields[3])}] = struct{}{}
+		}
+	}
+	states := map[string]string{}
+	for _, pane := range snapshot.Panes {
+		if _, found := live[paneKey{session: pane.Session, pane: pane.Pane}]; found && statePriority(pane.State) > statePriority(states[pane.Session]) {
+			states[pane.Session] = pane.State
+		}
+	}
+	names := make([]string, 0, len(states))
+	for name := range states {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		fmt.Fprintf(stdout, "%s\t%s\n", name, states[name])
+	}
+	return runtime.ExitComplete
+}
+
+func sanitizeProtocolID(value string) string {
+	var result strings.Builder
+	for _, character := range value {
+		if character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z' || character >= '0' && character <= '9' || strings.ContainsRune("._-", character) {
+			result.WriteRune(character)
+		} else {
+			result.WriteByte('_')
+		}
+	}
+	return result.String()
+}
+
+func statePriority(state string) int {
+	switch state {
+	case "error":
+		return 70
+	case "permission":
+		return 60
+	case "waiting_for_input":
+		return 50
+	case "blocked":
+		return 40
+	case "done":
+		return 30
+	case "running":
+		return 20
+	case "idle":
+		return 10
+	default:
+		return 0
+	}
 }
 
 func publish(o options, stdout io.Writer) int {

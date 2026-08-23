@@ -102,6 +102,24 @@ except (KeyError, TypeError, ValueError, json.JSONDecodeError):
 '
 }
 
+runtime_fast_session_states() {
+	local runtime_path trusted_path output session state extra seen=''
+	[[ "${AGENT_STATUS_RUNTIME_ENABLED:-0}" == 1 ]] || return 1
+	store_has_dirty_markers && return 1
+	runtime_path="${AGENT_STATUS_RUNTIME_PATH:-$ROOT/agent-status-runtime/bin/agent-status-runtime}"
+	trusted_path="${AGENT_STATUS_RUNTIME_FAST_PATH:-$ROOT/agent-status-runtime/bin/agent-status-runtime}"
+	[[ "$runtime_path" == "$trusted_path" && "$runtime_path" = /* && -x "$runtime_path" ]] || return 1
+	output="$("$runtime_path" socket-sessions --root "$STATUS_DIR" <<<"$snapshot" 2>/dev/null)" || return 1
+	[[ -z "$output" ]] && return 0
+	while IFS=$'\t' read -r session state extra; do
+		[[ -n "$session" && -z "$extra" && "$session" =~ ^[A-Za-z0-9_.-]{1,64}$ ]] || return 1
+		case "$state" in running|permission|waiting_for_input|blocked|done|idle|error) ;; *) return 1 ;; esac
+		case $'\n'"$seen" in *$'\n'"$session"$'\n'*) return 1 ;; esac
+		seen+="$session"$'\n'
+	done <<<"$output"
+	printf '%s' "$output"
+}
+
 status_bg() {
 	local state="$1"
 
@@ -143,8 +161,12 @@ render_session_tab() {
 sessions=()
 snapshot="$(tmux list-panes -a -F $'#{session_name}\t#{window_index}\t#{window_name}\t#{pane_id}\t#{pane_current_command}\t#{pane_title}\t#{pane_current_path}\t#{pane_start_command}\t#{pane_pid}' 2>/dev/null || true)"
 AGENT_STATUS_PANE_SNAPSHOT="$snapshot" "$ROOT/codex-status-refresh.sh" >/dev/null 2>&1 || true
-runtime_snapshot="$("$ROOT/agent-status.sh" runtime-snapshot 2>/dev/null || true)"
-runtime_sessions="$(printf '%s' "$runtime_snapshot" | runtime_session_states 2>/dev/null || true)"
+if runtime_sessions="$(runtime_fast_session_states)"; then
+	runtime_snapshot=''
+else
+	runtime_snapshot="$(AGENT_STATUS_PANE_SNAPSHOT="$snapshot" "$ROOT/agent-status.sh" runtime-snapshot 2>/dev/null || true)"
+	runtime_sessions="$(printf '%s' "$runtime_snapshot" | runtime_session_states 2>/dev/null || true)"
+fi
 while IFS= read -r session; do
 	[[ -n "$session" ]] && sessions+=("$session")
 done < <(

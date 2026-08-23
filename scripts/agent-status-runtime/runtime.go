@@ -3,6 +3,7 @@ package runtime
 import (
 	"encoding/json"
 	"errors"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -60,6 +61,16 @@ type Snapshot struct {
 	Revision      uint64    `json:"revision"`
 	Panes         []Pane    `json:"panes"`
 	Sessions      []Session `json:"sessions"`
+}
+
+type LiveState struct {
+	Snapshot Snapshot
+	expiries []paneExpiry
+}
+
+type paneExpiry struct {
+	session, pane string
+	at            int64
 }
 
 func MarshalSnapshot(snapshot Snapshot) (string, error) {
@@ -152,10 +163,20 @@ func deriveSessions(snapshot *Snapshot) {
 }
 
 func ImportV1(root string, c Config, now int64) (Snapshot, []string, int) {
+	state, diagnostics, exit := importV1(root, c, now)
+	return state.Snapshot, diagnostics, exit
+}
+
+func ImportV1Live(root string, c Config, now int64) (LiveState, []string, int) {
+	return importV1(root, c, now)
+}
+
+func importV1(root string, c Config, now int64) (LiveState, []string, int) {
 	snapshot := Snapshot{SchemaVersion: SchemaVersion}
 	if ValidateConfig(c) != nil {
-		return snapshot, nil, ExitInvalid
+		return LiveState{Snapshot: snapshot}, nil, ExitInvalid
 	}
+	live := LiveState{Snapshot: snapshot}
 	var diagnostics []string
 	read := func(dir string, pane bool) {
 		entries, err := os.ReadDir(filepath.Join(root, dir))
@@ -182,6 +203,9 @@ func ImportV1(root string, c Config, now int64) (Snapshot, []string, int) {
 					continue
 				}
 				snapshot.Panes = append(snapshot.Panes, Pane{Session: session, Pane: paneID, State: state, Token: token})
+				if !legacy {
+					live.expiries = append(live.expiries, paneExpiry{session: session, pane: paneID, at: expiryAt(updated, state, c)})
+				}
 			} else {
 				snapshot.Sessions = append(snapshot.Sessions, Session{Name: entry.Name(), State: state, Token: token})
 			}
@@ -206,9 +230,11 @@ func ImportV1(root string, c Config, now int64) (Snapshot, []string, int) {
 	}
 	sort.Slice(snapshot.Sessions, func(i, j int) bool { return snapshot.Sessions[i].Name < snapshot.Sessions[j].Name })
 	if len(diagnostics) > 0 {
-		return snapshot, diagnostics, ExitPartial
+		live.Snapshot = snapshot
+		return live, diagnostics, ExitPartial
 	}
-	return snapshot, nil, ExitComplete
+	live.Snapshot = snapshot
+	return live, nil, ExitComplete
 }
 
 func parseRecord(path string) (string, int64, string, bool, bool) {
@@ -241,11 +267,22 @@ func validState(state string) string {
 	return ""
 }
 func stale(state string, updated int64, c Config, now int64) bool {
-	ttl := c.ActiveTTL
+	return now-updated > ttlForState(state, c)
+}
+
+func ttlForState(state string, c Config) int64 {
 	if state == "done" || state == "idle" || state == "error" {
-		ttl = c.TerminalTTL
+		return c.TerminalTTL
 	}
-	return now-updated > ttl
+	return c.ActiveTTL
+}
+
+func expiryAt(updated int64, state string, c Config) int64 {
+	ttl := ttlForState(state, c)
+	if updated > math.MaxInt64-ttl {
+		return math.MaxInt64
+	}
+	return updated + ttl
 }
 func priority(state string) int {
 	switch state {

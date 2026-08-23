@@ -3,11 +3,13 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"io"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -42,6 +44,126 @@ func TestServeCreatesSocketAndStopsOnSignal(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestServeReclaimsSocketAfterUnexpectedExit(t *testing.T) {
+	binary := buildBinary(t)
+	runtimeDir := shortRuntimeDir(t)
+	root := stateRoot(t)
+	endpoint := filepath.Join(runtimeDir, "agent-status", "agent-status.sock")
+	first := exec.Command(binary, "serve", "--root", root)
+	first.Env = append(os.Environ(), "XDG_RUNTIME_DIR="+runtimeDir)
+	if err := first.Start(); err != nil {
+		t.Fatal(err)
+	}
+	waitForSocket(t, endpoint)
+	if err := first.Process.Kill(); err != nil {
+		t.Fatal(err)
+	}
+	waitForExit(t, first, false)
+	if _, err := os.Lstat(endpoint); err != nil {
+		t.Fatalf("unexpected exit did not leave the restart case to recover: %v", err)
+	}
+	second := exec.Command(binary, "serve", "--root", root)
+	second.Env = append(os.Environ(), "XDG_RUNTIME_DIR="+runtimeDir)
+	if err := second.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if second.ProcessState == nil {
+			_ = second.Process.Kill()
+			waitForExit(t, second, false)
+		}
+	})
+	waitForSocket(t, endpoint)
+	if err := second.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	waitForExit(t, second, true)
+}
+
+func TestServeUsesCurrentTimeWhenNowIsOmitted(t *testing.T) {
+	binary := buildBinary(t)
+	runtimeDir := shortRuntimeDir(t)
+	root := stateRoot(t)
+	if err := os.WriteFile(filepath.Join(root, "panes", "work_p1"), []byte("1\trunning\t1\tagent\t1\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	command := exec.Command(binary, "serve", "--root", root, "--active-ttl", "1")
+	command.Env = append(os.Environ(), "XDG_RUNTIME_DIR="+runtimeDir)
+	if err := command.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if command.ProcessState == nil {
+			_ = command.Process.Kill()
+			waitForExit(t, command, false)
+		}
+	})
+	waitForSocket(t, filepath.Join(runtimeDir, "agent-status", "agent-status.sock"))
+	client := exec.Command(binary, "socket-snapshot", "--root", root)
+	client.Env = append(os.Environ(), "XDG_RUNTIME_DIR="+runtimeDir)
+	output, err := client.Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var response struct {
+		Snapshot struct {
+			Panes []struct {
+				State string `json:"state"`
+			} `json:"panes"`
+		} `json:"snapshot"`
+	}
+	if err := json.Unmarshal(output, &response); err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Snapshot.Panes) != 1 || response.Snapshot.Panes[0].State != "idle" {
+		t.Fatalf("serve imported stale state without current time: %s", output)
+	}
+	if err := command.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	waitForExit(t, command, true)
+}
+
+func TestSocketSessionsReturnsOnlyLiveInventory(t *testing.T) {
+	binary := buildBinary(t)
+	runtimeDir := shortRuntimeDir(t)
+	root := stateRoot(t)
+	for path, content := range map[string]string{
+		filepath.Join(root, "panes", "work__1"):    "1\trunning\t100\tagent\t1\n",
+		filepath.Join(root, "panes", "history__9"): "1\terror\t100\tagent\t1\n",
+	} {
+		if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	server := exec.Command(binary, "serve", "--root", root, "--now", "100")
+	server.Env = append(os.Environ(), "XDG_RUNTIME_DIR="+runtimeDir)
+	if err := server.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if server.ProcessState == nil {
+			_ = server.Process.Kill()
+			waitForExit(t, server, false)
+		}
+	})
+	waitForSocket(t, filepath.Join(runtimeDir, "agent-status", "agent-status.sock"))
+	client := exec.Command(binary, "socket-sessions", "--root", root)
+	client.Env = append(os.Environ(), "XDG_RUNTIME_DIR="+runtimeDir)
+	client.Stdin = strings.NewReader("work\t0\tmain\t%1\tbash\n")
+	output, err := client.Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(output) != "work\trunning\n" {
+		t.Fatalf("socket sessions = %q", output)
+	}
+	if err := server.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	waitForExit(t, server, true)
 }
 
 func TestInvalidCommandsExitWithoutSocket(t *testing.T) {

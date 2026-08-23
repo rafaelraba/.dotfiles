@@ -41,10 +41,10 @@ source_state() {
 }
 
 render_runtime_tab() {
-  local runtime_path="$1" enabled="${AGENT_STATUS_RUNTIME_ENABLED:-1}"
+  local runtime_path="$1" enabled="${AGENT_STATUS_RUNTIME_ENABLED:-1}" trusted_path="${AGENT_STATUS_RUNTIME_FAST_PATH:-$ROOT/scripts/agent-status-runtime/bin/agent-status-runtime}"
   export RUNTIME_ARG_LOG
   AGENT_STATUS_CONFIG="$TMP/missing.conf" AGENT_STATUS_STATE_DIR="$TMP/render-state" AGENT_STATUS_NOW=100 AGENT_STATUS_NO_COLOR=1 \
-    AGENT_STATUS_RUNTIME_ENABLED="$enabled" AGENT_STATUS_RUNTIME_PATH="$runtime_path" PATH="$TMP/render-bin:$PATH" \
+    AGENT_STATUS_RUNTIME_ENABLED="$enabled" AGENT_STATUS_RUNTIME_PATH="$runtime_path" AGENT_STATUS_RUNTIME_FAST_PATH="$trusted_path" PATH="$TMP/render-bin:$PATH" \
     "$ROOT/scripts/status-sessions.sh" oldest
 }
 
@@ -104,7 +104,7 @@ check 1 "$status" 'doctor missing paths fail required checks'
 
 if [[ "${1:-core}" == "integration" ]]; then
   default_runtime_enabled="$(AGENT_STATUS_CONFIG="$TMP/missing.conf" bash -c 'source "$1"; agent_status_load_config; printf %s "$AGENT_STATUS_RUNTIME_ENABLED"' _ "$ROOT/scripts/agent-status/config.sh")"
-  check 0 "$default_runtime_enabled" 'runtime is disabled by default'
+  check 1 "$default_runtime_enabled" 'runtime is enabled by default'
   rm -f "$TMP/state/panes/bad"
   printf '1\terror\t100\topencode\t2\n' >"$TMP/state/panes/work__9"
   runtime_dir="$(mktemp -d /tmp/as-runtime.XXXXXX)"
@@ -147,6 +147,28 @@ PY
   run env XDG_RUNTIME_DIR="$runtime_dir" "$BIN" publish --root "$TMP/state" --session oldest --pane _7 --source harness --state error --producer-revision 2
   check 0 "$status" 'socket publish exits successfully'
   contains '"type":"ack"' "$(<"$TMP/stdout")" 'socket publish returns acknowledgement'
+
+  mkdir -p "$TMP/live-render-bin"
+  cat >"$TMP/live-render-bin/tmux" <<'EOF'
+#!/usr/bin/env bash
+case "$1" in
+  list-panes) printf 'work\t0\tmain\t%%1\tbash\tmain\t/tmp\tbash\t999999\n' ;;
+  list-sessions) printf '10\t$1\twork\n' ;;
+esac
+EOF
+  chmod +x "$TMP/live-render-bin/tmux"
+  live_v1="$(AGENT_STATUS_CONFIG="$TMP/missing.conf" AGENT_STATUS_STATE_DIR="$TMP/state" AGENT_STATUS_NOW=100 AGENT_STATUS_NO_COLOR=1 \
+    AGENT_STATUS_RUNTIME_ENABLED=0 PATH="$TMP/live-render-bin:$PATH" "$ROOT/scripts/status-sessions.sh" work)"
+  live_fast="$(AGENT_STATUS_CONFIG="$TMP/missing.conf" AGENT_STATUS_STATE_DIR="$TMP/state" AGENT_STATUS_NOW=100 AGENT_STATUS_NO_COLOR=1 \
+    AGENT_STATUS_RUNTIME_ENABLED=1 AGENT_STATUS_RUNTIME_PATH="$BIN" AGENT_STATUS_RUNTIME_FAST_PATH="$BIN" XDG_RUNTIME_DIR="$runtime_dir" \
+    PATH="$TMP/live-render-bin:$PATH" "$ROOT/scripts/status-sessions.sh" work)"
+  check "$live_v1" "$live_fast" 'fast socket rendering preserves v1-visible output'
+  run env XDG_RUNTIME_DIR="$runtime_dir" "$BIN" publish --root "$TMP/state" --session work --pane _1 --source harness --state permission --producer-revision 3
+  check 0 "$status" 'socket publish updates fast render state'
+  live_fast_updated="$(AGENT_STATUS_CONFIG="$TMP/missing.conf" AGENT_STATUS_STATE_DIR="$TMP/state" AGENT_STATUS_NOW=100 AGENT_STATUS_NO_COLOR=1 \
+    AGENT_STATUS_RUNTIME_ENABLED=1 AGENT_STATUS_RUNTIME_PATH="$BIN" AGENT_STATUS_RUNTIME_FAST_PATH="$BIN" XDG_RUNTIME_DIR="$runtime_dir" \
+    PATH="$TMP/live-render-bin:$PATH" "$ROOT/scripts/status-sessions.sh" work)"
+  check ' [? work 1]  ' "$live_fast_updated" 'fast rendering consumes the live socket state'
   kill -TERM "$serve_pid" 2>/dev/null || true
   wait "$serve_pid" 2>/dev/null || true
 
@@ -164,18 +186,59 @@ PY
   cat >"$TMP/render-bin/tmux" <<'EOF'
 #!/usr/bin/env bash
 case "$1" in
-  list-panes) printf 'oldest\t0\tmain\t%%7\tbash\tmain\t/tmp\tbash\t1\n' ;;
+  list-panes) printf 'oldest\t0\tmain\t%%7\tbash\tmain\t/tmp\tbash\t999999\n' ;;
   list-sessions) printf '10\t$1\toldest\n' ;;
-esac
+  esac
 EOF
   chmod +x "$TMP/render-bin/tmux"
-  baseline="$(AGENT_STATUS_CONFIG="$TMP/missing.conf" AGENT_STATUS_STATE_DIR="$TMP/render-state" AGENT_STATUS_NOW=100 AGENT_STATUS_NO_COLOR=1 PATH="$TMP/render-bin:$PATH" "$ROOT/scripts/status-sessions.sh" oldest)"
-  check ' [· oldest 1]  ' "$baseline" 'v1 reports idle before runtime preference'
+  baseline="$(XDG_RUNTIME_DIR="$TMP/no-daemon-runtime" render_runtime_tab "$BIN")"
+  check ' [✓ oldest 1]  ' "$baseline" 'default runtime falls back from the socket to a compatible CLI snapshot'
+  v1_baseline="$(AGENT_STATUS_CONFIG="$TMP/missing.conf" AGENT_STATUS_STATE_DIR="$TMP/render-state" AGENT_STATUS_NOW=100 AGENT_STATUS_NO_COLOR=1 \
+    AGENT_STATUS_RUNTIME_ENABLED=0 PATH="$TMP/render-bin:$PATH" "$ROOT/scripts/status-sessions.sh" oldest)"
+  check ' [✓ oldest 1]  ' "$v1_baseline" 'explicit runtime opt-out preserves v1 state'
+
+  fast_runtime="$TMP/fast-runtime"
+  write_runtime "$fast_runtime" 'printf "%s\n" "$1" >>"$RUNTIME_ARG_LOG"; [[ "$1" == socket-sessions ]] && printf "oldest\tidle\n"'
+  fast_output="$(AGENT_STATUS_RUNTIME_FAST_PATH="$fast_runtime" RUNTIME_ARG_LOG="$TMP/fast-runtime-args" render_runtime_tab "$fast_runtime")"
+  check ' [· oldest 1]  ' "$fast_output" 'validated fast session rows override v1 state'
+  check 'socket-sessions' "$(<"$TMP/fast-runtime-args")" 'fast rendering uses one runtime client process'
+
+  mkdir -p "$TMP/hidden-render-state/panes" "$TMP/hidden-render-bin"
+  printf '1\tdone\t100\tadapter\t1\n' >"$TMP/hidden-render-state/panes/.hidden__1"
+  cat >"$TMP/hidden-render-bin/tmux" <<'EOF'
+#!/usr/bin/env bash
+case "$1" in
+  list-panes) printf '.hidden\t0\tmain\t%%1\tbash\tmain\t/tmp\tbash\t999999\n' ;;
+  list-sessions) printf '10\t$1\t.hidden\n' ;;
+esac
+EOF
+  chmod +x "$TMP/hidden-render-bin/tmux"
+  hidden_runtime="$TMP/hidden-runtime"
+  write_runtime "$hidden_runtime" 'printf "%s\n" "$1" >>"$RUNTIME_ARG_LOG"; [[ "$1" == socket-sessions ]] && printf ".hidden\terror\n"'
+  hidden_fast_output="$(AGENT_STATUS_CONFIG="$TMP/missing.conf" AGENT_STATUS_STATE_DIR="$TMP/hidden-render-state" AGENT_STATUS_NOW=100 AGENT_STATUS_NO_COLOR=1 \
+    AGENT_STATUS_RUNTIME_ENABLED=1 AGENT_STATUS_RUNTIME_PATH="$hidden_runtime" AGENT_STATUS_RUNTIME_FAST_PATH="$hidden_runtime" \
+    RUNTIME_ARG_LOG="$TMP/hidden-runtime-args" PATH="$TMP/hidden-render-bin:$PATH" "$ROOT/scripts/status-sessions.sh" .hidden)"
+  check ' [! .hidden 1]  ' "$hidden_fast_output" 'no dirty marker keeps the daemon fast path'
+  check 'socket-sessions' "$(<"$TMP/hidden-runtime-args")" 'no dirty marker invokes the daemon fast path'
+  mkdir -p "$TMP/hidden-render-state/.runtime-dirty"
+  printf '1\n' >"$TMP/hidden-render-state/.runtime-dirty/.hidden__1"
+  : >"$TMP/hidden-runtime-args"
+  hidden_dirty_output="$(AGENT_STATUS_CONFIG="$TMP/missing.conf" AGENT_STATUS_STATE_DIR="$TMP/hidden-render-state" AGENT_STATUS_NOW=100 AGENT_STATUS_NO_COLOR=1 \
+    AGENT_STATUS_RUNTIME_ENABLED=1 AGENT_STATUS_RUNTIME_PATH="$hidden_runtime" AGENT_STATUS_RUNTIME_FAST_PATH="$hidden_runtime" \
+    RUNTIME_ARG_LOG="$TMP/hidden-runtime-args" PATH="$TMP/hidden-render-bin:$PATH" "$ROOT/scripts/status-sessions.sh" .hidden)"
+  check ' [✓ .hidden 1]  ' "$hidden_dirty_output" 'dot-prefixed dirty marker preserves current v1 state'
+  check 'snapshot' "$(<"$TMP/hidden-runtime-args")" 'dot-prefixed dirty marker bypasses the daemon fast path'
+
+  malformed_fast_runtime="$TMP/malformed-fast-runtime"
+  write_runtime "$malformed_fast_runtime" 'printf "%s\n" "$1" >>"$RUNTIME_ARG_LOG"; if [[ "$1" == socket-sessions ]]; then printf "malformed\n"; else printf '\''{"type":"snapshot","snapshot":{"schema_version":2,"epoch":"v1","revision":0,"panes":[{"session":"oldest","pane":"_7","state":"idle"}],"sessions":[{"name":"oldest","state":"idle"}]}}\n'\''; fi'
+  malformed_fast_output="$(AGENT_STATUS_RUNTIME_FAST_PATH="$malformed_fast_runtime" RUNTIME_ARG_LOG="$TMP/malformed-fast-args" render_runtime_tab "$malformed_fast_runtime")"
+  check ' [· oldest 1]  ' "$malformed_fast_output" 'malformed fast rows use the validated socket fallback'
+  check $'socket-sessions\nsocket-snapshot' "$(<"$TMP/malformed-fast-args")" 'malformed fast rows fall back without invoking the CLI snapshot'
 
   runtime_path="$TMP/runtime dir/runtime;\$(touch $TMP/pwn)"
   write_runtime "$runtime_path" 'if [[ "$1" == publish ]]; then printf '\''{"type":"ack"}\n'\''; exit 0; fi; printf "%s\n" "$#:$1" >>"$RUNTIME_ARG_LOG"; printf '\''{"schema_version":2,"epoch":"v1","revision":0,"panes":[{"session":"oldest","pane":"_7","state":"idle"}],"sessions":[{"name":"oldest","state":"idle"}]}\n'\'''
   runtime_output="$(RUNTIME_ARG_LOG="$TMP/runtime-args" render_runtime_tab "$runtime_path")"
-  check "$baseline" "$runtime_output" 'compatible runtime preserves v1 tab output'
+  check ' [· oldest 1]  ' "$runtime_output" 'compatible runtime overrides v1 state'
   check $'5:socket-snapshot\n5:snapshot' "$(<"$TMP/runtime-args")" 'daemon probe falls back to CLI as one argv without evaluation'
   if test -e "$TMP/pwn"; then
     pwn_status=0
@@ -190,7 +253,7 @@ EOF
   check ' [! oldest 1]  ' "$differing_output" 'compatible runtime error overrides idle v1 state'
 
   disabled_output="$(AGENT_STATUS_RUNTIME_ENABLED=0 RUNTIME_ARG_LOG="$TMP/disabled-args" render_runtime_tab "$runtime_path")"
-  check "$baseline" "$disabled_output" 'disabled runtime preserves v1 output parity'
+  check "$v1_baseline" "$disabled_output" 'disabled runtime preserves v1 output parity'
   if test -e "$TMP/disabled-args"; then
     disabled_status=0
   else
@@ -203,14 +266,14 @@ EOF
   mkdir -p "$TMP/render-state/.runtime-dirty"
   printf '1\n' >"$TMP/render-state/.runtime-dirty/oldest__7"
   dirty_output="$(RUNTIME_ARG_LOG="$TMP/dirty-render-args" render_runtime_tab "$dirty_render_runtime")"
-  check "$baseline" "$dirty_output" 'dirty marker preserves CLI then v1 render fallback'
-  check $'publish\nsnapshot' "$(<"$TMP/dirty-render-args")" 'dirty marker skips daemon probe and invokes CLI snapshot'
+  check ' [· oldest 1]  ' "$dirty_output" 'dirty marker uses the CLI snapshot'
+  check 'snapshot' "$(<"$TMP/dirty-render-args")" 'dirty marker skips daemon probe and invokes CLI snapshot'
   rm -rf "$TMP/render-state/.runtime-dirty"
 
   malformed_historical_runtime="$TMP/malformed-historical-runtime"
   write_runtime "$malformed_historical_runtime" 'if [[ "$1" == publish ]]; then printf '\''{"type":"ack"}\n'\''; exit 0; fi; printf "%s\n" "$1" >>"$RUNTIME_ARG_LOG"; if [[ "$1" == socket-snapshot ]]; then printf '\''{"type":"snapshot","snapshot":{"schema_version":2,"epoch":"v1","revision":0,"panes":[{"session":"missing","pane":"_99","state":"invalid"}],"sessions":[]}}\n'\''; else printf '\''{"schema_version":2,"epoch":"v1","revision":0,"panes":[{"session":"oldest","pane":"_7","state":"idle"}],"sessions":[{"name":"oldest","state":"idle"}]}\n'\''; fi'
   malformed_historical_output="$(RUNTIME_ARG_LOG="$TMP/malformed-historical-args" render_runtime_tab "$malformed_historical_runtime")"
-  check "$baseline" "$malformed_historical_output" 'malformed historical daemon pane falls through to CLI then v1'
+  check ' [· oldest 1]  ' "$malformed_historical_output" 'malformed historical daemon pane falls through to CLI'
   check $'socket-snapshot\nsnapshot' "$(<"$TMP/malformed-historical-args")" 'malformed historical daemon pane invokes CLI after daemon rejection'
 
   dirty_runtime="$TMP/dirty-runtime"
@@ -234,7 +297,7 @@ EOF
       inventory) failure_path="$TMP/$failure-runtime"; write_runtime "$failure_path" 'printf '\''{"schema_version":2,"epoch":"v1","revision":0,"panes":[{"session":"missing","pane":"_99","state":"done"}],"sessions":[]}\n'\''' ;;
     esac
     fallback_output="$(render_runtime_tab "$failure_path")"
-    check "$baseline" "$fallback_output" "$failure runtime failure preserves v1 parity"
+    check "$v1_baseline" "$fallback_output" "$failure runtime failure preserves v1 parity"
   done
 
   mkdir -p "$TMP/build-bin"
@@ -247,8 +310,16 @@ touch "$2"
 chmod +x "$2"
 EOF
   chmod +x "$TMP/build-bin/go"
+  cat >"$TMP/service-installer" <<'EOF'
+#!/usr/bin/env bash
+[[ "$1" == auto && -x "$AGENT_STATUS_RUNTIME_SERVICE_BINARY" ]] || exit 1
+printf '%s\n' "$AGENT_STATUS_RUNTIME_SERVICE_BINARY" >>"$SERVICE_INSTALL_LOG"
+EOF
+  chmod +x "$TMP/service-installer"
   runtime_build="$TMP/restored runtime"
-  GO_BUILD_LOG="$TMP/go-build.log" AGENT_STATUS_RUNTIME_BUILD_PATH="$runtime_build" PATH="$TMP/build-bin:$PATH" "$ROOT/restoration_scripts/01-verify-install.sh" >/dev/null
+  GO_BUILD_LOG="$TMP/go-build.log" SERVICE_INSTALL_LOG="$TMP/service-install.log" AGENT_STATUS_PLATFORM=Darwin \
+    AGENT_STATUS_RUNTIME_BUILD_PATH="$runtime_build" AGENT_STATUS_RUNTIME_SERVICE_INSTALLER="$TMP/service-installer" \
+    PATH="$TMP/build-bin:$PATH" "$ROOT/restoration_scripts/01-verify-install.sh" >/dev/null
   if test -x "$runtime_build"; then
     build_status=0
   else
@@ -256,9 +327,13 @@ EOF
   fi
   check 0 "$build_status" 'restoration builds runtime when Go exists'
   contains "build -o $runtime_build ./cmd/agent-status-runtime" "$(cat "$TMP/go-build.log")" 'restoration source build uses the runtime command package'
+  check "$runtime_build" "$(cat "$TMP/service-install.log")" 'restoration installs service only after the stable binary exists'
   rm -f "$runtime_build"
-  GO_BUILD_FAIL=1 GO_BUILD_LOG="$TMP/go-build-failed.log" AGENT_STATUS_RUNTIME_BUILD_PATH="$runtime_build" PATH="$TMP/build-bin:$PATH" "$ROOT/restoration_scripts/01-verify-install.sh" >/dev/null
+  GO_BUILD_FAIL=1 GO_BUILD_LOG="$TMP/go-build-failed.log" SERVICE_INSTALL_LOG="$TMP/service-install.log" AGENT_STATUS_PLATFORM=Darwin \
+    AGENT_STATUS_RUNTIME_BUILD_PATH="$runtime_build" AGENT_STATUS_RUNTIME_SERVICE_INSTALLER="$TMP/service-installer" \
+    PATH="$TMP/build-bin:$PATH" "$ROOT/restoration_scripts/01-verify-install.sh" >/dev/null
   check 1 "$(test -e "$runtime_build"; printf '%s' "$?")" 'restoration source build failure remains non-fatal'
+  check 1 "$(wc -l <"$TMP/service-install.log" | tr -d ' ')" 'failed rebuild does not reload the service'
 fi
 
 if ((fail)); then

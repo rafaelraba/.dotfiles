@@ -67,16 +67,29 @@ check_command sketchybar
 
 echo ""
 echo "Agent status runtime:"
+runtime_built=0
 if command -v go >/dev/null 2>&1; then
     runtime_module="$DOTFILES_PATH/scripts/agent-status-runtime"
     runtime_binary="${AGENT_STATUS_RUNTIME_BUILD_PATH:-$runtime_module/bin/agent-status-runtime}"
     if [ -f "$runtime_module/go.mod" ] && mkdir -p "$(dirname "$runtime_binary")" && (cd "$runtime_module" && go build -o "$runtime_binary" ./cmd/agent-status-runtime); then
         echo "  ✅ agent-status-runtime"
+        runtime_built=1
     else
         echo "  ⚠️  agent-status-runtime source build unavailable; v1 fallback remains active"
     fi
 else
     echo "  ⚠️  Go unavailable; v1 fallback remains active"
+fi
+
+runtime_platform="${AGENT_STATUS_PLATFORM:-$(uname -s)}"
+runtime_installer="${AGENT_STATUS_RUNTIME_SERVICE_INSTALLER:-$DOTFILES_PATH/scripts/agent-status-runtime/install-launch-agent.sh}"
+if [ "$runtime_platform" = Darwin ] && [ "$runtime_built" = 1 ]; then
+    if AGENT_STATUS_RUNTIME_SERVICE_BINARY="$runtime_binary" bash "$runtime_installer" auto; then
+        echo "  ✅ agent-status-runtime LaunchAgent"
+    else
+        echo "  ⚠️  agent-status-runtime LaunchAgent installation failed; v1 fallback remains active"
+        failures=$((failures + 1))
+    fi
 fi
 
 echo ""

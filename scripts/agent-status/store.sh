@@ -46,7 +46,12 @@ store_clear_dirty_if_matching() {
 }
 
 store_has_dirty_markers() {
-  [[ -d "$STATUS_DIR/.runtime-dirty" ]] && find "$STATUS_DIR/.runtime-dirty" -type f -print -quit | grep -q .
+  local marker dirty_dir="$STATUS_DIR/.runtime-dirty"
+  [[ -d "$dirty_dir" ]] || return 1
+  for marker in "$dirty_dir"/* "$dirty_dir"/.[!.]* "$dirty_dir"/..?*; do
+    [[ -f "$marker" ]] && return 0
+  done
+  return 1
 }
 
 # One render-local tmux view. Callers may pass this output through

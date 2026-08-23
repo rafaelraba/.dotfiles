@@ -17,3 +17,6 @@ Thumbs.db
 shell/zsh/.zim/modules/
 # Local Pi runtime state
 .atl/
+
+# Generated agent-status runtime binary
+scripts/agent-status-runtime/bin/
