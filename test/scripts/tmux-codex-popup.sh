@@ -31,6 +31,7 @@ case "$1" in
     [[ " ${COLLISIONS:-} " == *" ${3#=} "* ]]
     ;;
   list-sessions) printf '10 alpha\n20 beta\n' ;;
+  list-panes) printf '%s\n' "${PANE_SNAPSHOT:-}" ;;
   display-message)
     if [[ "$*" == *"-t ${TMUX_PANE:-} #S"* ]]; then
       printf '%s\n' "${CURRENT_SESSION:-alpha}"
@@ -44,6 +45,8 @@ esac
 EOF
 cat >"$BIN/ps" <<'EOF'
 #!/usr/bin/env bash
+[[ -n "${PS_LOG:-}" ]] && printf 'scan\n' >>"$PS_LOG"
+[[ -n "${PS_SLEEP:-}" ]] && sleep "$PS_SLEEP"
 printf '%s\n' "${PS_SNAPSHOT:-}"
 EOF
 chmod +x "$BIN/tmux" "$BIN/ps"
@@ -101,6 +104,25 @@ check opencode "$(cut -f4 "$record")" 'verified live producer source precedence 
 printf '1\tidle\t100\tcodex\t9\n' >"$record"
 run_refresh 'Ready' '' "$snapshot"
 check 1 "$(test -e "$record"; printf '%s' "$?")" 'Codex cache clears when process leaves pane'
+
+# The asynchronous refresher owns inventory collection and coalesces concurrent scans.
+: >"$TMP/ps.log"
+PS_LOG="$TMP/ps.log" PS_SLEEP=0.2 SCREEN='Ready' PS_SNAPSHOT="$process" TMUX_LOG="$TMP/tmux.log" PATH="$BIN:$PATH" HOME="$TMP/home" \
+  XDG_CACHE_HOME="$TMP/cache" AGENT_STATUS_CONFIG="$TMP/missing" AGENT_STATUS_NOW=100 \
+  AGENT_STATUS_PANE_SNAPSHOT="$snapshot" "$ROOT/scripts/codex-status-refresh.sh" &
+refresh_pid=$!
+for _ in {1..50}; do [[ -s "$TMP/ps.log" ]] && break; sleep 0.01; done
+PS_LOG="$TMP/ps.log" PS_SLEEP=0.2 SCREEN='Ready' PS_SNAPSHOT="$process" TMUX_LOG="$TMP/tmux.log" PATH="$BIN:$PATH" HOME="$TMP/home" \
+  XDG_CACHE_HOME="$TMP/cache" AGENT_STATUS_CONFIG="$TMP/missing" AGENT_STATUS_NOW=100 \
+  AGENT_STATUS_PANE_SNAPSHOT="$snapshot" "$ROOT/scripts/codex-status-refresh.sh"
+wait "$refresh_pid"
+check 1 "$(wc -l <"$TMP/ps.log" | tr -d ' ')" 'concurrent Codex refreshes share one process scan'
+
+rm -f "$record"
+PANE_SNAPSHOT="$snapshot" SCREEN='Ready' PS_SNAPSHOT="$process" TMUX_LOG="$TMP/tmux.log" PATH="$BIN:$PATH" HOME="$TMP/home" \
+  XDG_CACHE_HOME="$TMP/cache" AGENT_STATUS_CONFIG="$TMP/missing" AGENT_STATUS_NOW=100 \
+  "$ROOT/scripts/codex-status-refresh.sh"
+check idle "$(cut -f2 "$record")" 'asynchronous Codex refresh collects its own tmux inventory'
 
 TMUX_LOG="$TMP/new.log" COLLISIONS='' PATH="$BIN:$PATH" "$ROOT/scripts/tmux-new-session.sh" /tmp/project
 check_contains 'new-session -d -s project -c /tmp/project' "$(cat "$TMP/new.log")" 'free basename fast path creates directly'
@@ -183,6 +205,8 @@ check_contains 'tmux-internal-session.sh --configure #{q:session_name}' "$(grep 
 check_contains 'set-hook -g client-attached' "$(cat "$ROOT/editors/tmux/tmux.conf")" 'attaching to an existing floating session reapplies internal options'
 check_contains 'set-hook -g client-session-changed' "$(cat "$ROOT/editors/tmux/tmux.conf")" 'switching into an existing floating session reapplies internal options'
 check_contains 'tmux refresh-client -S -t #{q:hook_client}' "$(grep -A 5 '^set-hook -g client-session-changed' "$ROOT/editors/tmux/tmux.conf")" 'changing sessions refreshes the invoking client status immediately'
+check_contains 'set -g status-left "#{E:@workspace-status} "' "$(cat "$ROOT/editors/tmux/tmux.conf")" 'selection rendering is a native tmux option expansion'
+check_contains '#(~/.dotfiles/scripts/status-sessions-refresh.sh)#(~/.dotfiles/scripts/codex-status-refresh.sh)' "$(grep '^set -g status-right ' "$ROOT/editors/tmux/tmux.conf")" 'status refresh jobs remain independent from selection rendering'
 check_contains "tmux-internal-session.sh --configure-existing" "$(cat "$ROOT/editors/tmux/tmux.conf")" 'config reload repairs existing floating sessions'
 check_contains "bind w choose-tree -Zw -f '#{?#{m:_*,#{session_name}},0,1}'" "$(cat "$ROOT/editors/tmux/tmux.conf")" 'native session tree excludes floating sessions'
 check_contains "bind D choose-client -Z -f '#{?#{m:_*,#{session_name}},0,1}'" "$(cat "$ROOT/editors/tmux/tmux.conf")" 'native client picker excludes clients in floating sessions'

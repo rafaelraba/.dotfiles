@@ -229,9 +229,14 @@ case "$1" in
   list-panes) printf 'oldest\t0\tmain\t%%7\tbash\tmain\t/tmp\tbash\noldest\t1\tcode\t%%8\tclaude\tcode\t/tmp\tclaude\nmiddle\t0\twork\t%%13\tvim\twork\t/tmp\tvim\n' ;;
 esac
 EOF
-chmod +x "$FAKE_BIN/tmux"
+cat >"$FAKE_BIN/ps" <<'EOF'
+#!/usr/bin/env bash
+printf 'unexpected process scan\n' >>"$PS_LOG"
+sleep 1
+EOF
+chmod +x "$FAKE_BIN/tmux" "$FAKE_BIN/ps"
 render_tab() {
-  AGENT_STATUS_RUNTIME_ENABLED=0 TMUX_LOG="$TMUX_LOG" PATH="$FAKE_BIN:$PATH" "$ROOT/scripts/status-sessions.sh" "$1"
+  AGENT_STATUS_RUNTIME_ENABLED=0 TMUX_LOG="$TMUX_LOG" PS_LOG="$TMP/render-ps.log" PATH="$FAKE_BIN:$PATH" "$ROOT/scripts/status-sessions.sh" "$1"
 }
 
 "$SCRIPT" clear oldest
@@ -247,6 +252,7 @@ check_contains '+2' "$single_tab" 'five visible tabs collapse only remaining ses
 check_contains '#[bg=#a6da95,fg=#0b0f1a,bold] 1 ' "$single_tab" 'active tab appends state-colored first position'
 check_contains '#[bg=#6c8f91,fg=#0b0f1a,bold] 2 ' "$single_tab" 'idle tab uses its distinct stable-position badge color'
 check_contains '#[bg=#494d64,fg=#ffffff,bold] oldest ' "$single_tab" 'current tab keeps distinct brighter neutral name segment'
+check 1 "$(test -e "$TMP/render-ps.log"; printf '%s' "$?")" 'selected tab rendering skips the external process scan'
 check_contains '[✓ oldest 1]' "$(NO_COLOR=1 render_tab oldest)" 'no-color tab keeps distinct marker and position'
 
 # A newly created current session beyond capacity replaces only the final slot.
