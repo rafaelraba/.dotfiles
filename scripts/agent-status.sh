@@ -298,6 +298,19 @@ agent_status_runtime_publish() {
 	store_clear_dirty_if_matching "$path" "$token"
 }
 
+agent_status_runtime_clear() {
+	local session="$1" pane="$2" runtime_path path
+	[[ "${AGENT_STATUS_RUNTIME_ENABLED:-0}" == "1" ]] || return 1
+	runtime_path="${AGENT_STATUS_RUNTIME_PATH:-$ROOT/agent-status-runtime/bin/agent-status-runtime}"
+	[[ "$runtime_path" = /* && -x "$runtime_path" ]] || return 1
+	local command=("$runtime_path" clear --root "$STATUS_DIR" --session "$session")
+	[[ -z "$pane" ]] || command+=(--pane "${pane//%/_}")
+	"${command[@]}" 2>/dev/null | grep -q '"type":"ack"' || return 1
+	for path in "${STORE_CLEAR_DIRTY_PATHS[@]}"; do
+		store_clear_dirty_if_matching "$path" clear
+	done
+}
+
 command="${1:-}"
 shift || true
 
@@ -309,7 +322,7 @@ set)
 	pane="$(resolve_pane "${2:-}")"
 	if store_set "$state" "$session" "$pane" "${3:-unknown}" "${4:-0}"; then
 		agent_status_runtime_publish "$(store_normalize "$state")" "$session" "$pane" "${3:-unknown}" "${4:-0}" || true
-		notify_transition "$(store_normalize "$state")" "$session" "$pane" || true
+		[[ "$STORE_STATE_TRANSITIONED" == 1 ]] && notify_transition "$(store_normalize "$state")" "$session" "$pane" || true
 	else
 		[[ $? == 2 ]] || exit 1
 	fi
@@ -326,6 +339,7 @@ clear)
 	session="$(resolve_session "${1:-}")"
 	pane="$(resolve_pane "${2:-}")"
 	store_clear "$session" "$pane"
+	agent_status_runtime_clear "$session" "$pane" || true
 	;;
 	inspect)
 		session="$(resolve_session "${1:-}")"

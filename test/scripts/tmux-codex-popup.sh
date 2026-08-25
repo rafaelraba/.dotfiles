@@ -54,7 +54,7 @@ chmod +x "$BIN/tmux" "$BIN/ps"
 run_refresh() {
   local screen="$1" process="$2" snapshot="$3"
   SCREEN="$screen" PS_SNAPSHOT="$process" TMUX_LOG="$TMP/tmux.log" PATH="$BIN:$PATH" HOME="$TMP/home" \
-    XDG_CACHE_HOME="$TMP/cache" AGENT_STATUS_CONFIG="$TMP/missing" AGENT_STATUS_NOW="${AGENT_STATUS_NOW:-100}" \
+    XDG_CACHE_HOME="$TMP/cache" AGENT_STATUS_CONFIG="${REFRESH_CONFIG:-$TMP/missing}" AGENT_STATUS_NOW="${AGENT_STATUS_NOW:-100}" \
     AGENT_STATUS_PANE_SNAPSHOT="$snapshot" "$ROOT/scripts/codex-status-refresh.sh"
 }
 
@@ -91,6 +91,32 @@ run_refresh "$prose" "$process" "$snapshot"
 check done "$(cut -f2 "$record")" 'running to idle becomes done and prose does not remain running'
 run_refresh 'Ready' "$process" "$snapshot"
 check done "$(cut -f2 "$record")" 'done survives idle refresh without duplicate transition'
+
+# Codex polls the same screen every five seconds. Repeated accepted refreshes
+# must not replay an attention sound, including after the sound cooldown.
+CODEX_SOUND_LOG="$TMP/codex-poll-sound.log"
+CODEX_SOUND_FILE="$TMP/codex-poll-sound.aiff"
+export CODEX_SOUND_LOG
+printf 'sound' >"$CODEX_SOUND_FILE"
+cat >"$BIN/afplay" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$1" >>"$CODEX_SOUND_LOG"
+EOF
+chmod +x "$BIN/afplay"
+cat >"$TMP/codex-sound.conf" <<EOF
+AGENT_STATUS_CONFIG_VERSION=1
+AGENT_STATUS_SOUND_ENABLED=1
+AGENT_STATUS_SOUND_STATES=(permission)
+AGENT_STATUS_SOUND_COOLDOWN=30
+AGENT_STATUS_SOUND_BACKEND=afplay
+AGENT_STATUS_SOUND_FILE="$CODEX_SOUND_FILE"
+EOF
+AGENT_STATUS_NOW=200 run_refresh 'Working (3s • esc to interrupt)' "$process" "$snapshot"
+REFRESH_CONFIG="$TMP/codex-sound.conf" AGENT_STATUS_NOW=205 run_refresh $'Allow command?\n1. Approve once' "$process" "$snapshot"
+REFRESH_CONFIG="$TMP/codex-sound.conf" AGENT_STATUS_NOW=210 run_refresh $'Allow command?\n1. Approve once' "$process" "$snapshot"
+REFRESH_CONFIG="$TMP/codex-sound.conf" AGENT_STATUS_NOW=240 run_refresh $'Allow command?\n1. Approve once' "$process" "$snapshot"
+check 1 "$(wc -l <"$CODEX_SOUND_LOG" | tr -d ' ')" 'Codex same-state polling emits one attention sound across cooldown'
+
 for stale_source in opencode claude pi; do
   printf '1\tdone\t1\t%s\t90000\n' "$stale_source" >"$record"
   run_refresh 'Working (3s • esc to interrupt)' "$process" "$snapshot"
@@ -102,8 +128,19 @@ printf '1\trunning\t100\topencode\t9\n' >"$record"
 run_refresh 'Ready' "$competing_process" "$snapshot"
 check opencode "$(cut -f4 "$record")" 'verified live producer source precedence is preserved'
 printf '1\tidle\t100\tcodex\t9\n' >"$record"
+cat >"$TMP/runtime" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$AGENT_STATUS_RUNTIME_LOG"
+case "$1" in
+  publish|clear) printf '{"type":"ack"}\n' ;;
+esac
+EOF
+chmod +x "$TMP/runtime"
+export AGENT_STATUS_RUNTIME_PATH="$TMP/runtime" AGENT_STATUS_RUNTIME_LOG="$TMP/runtime.log"
 run_refresh 'Ready' '' "$snapshot"
+unset AGENT_STATUS_RUNTIME_PATH AGENT_STATUS_RUNTIME_LOG
 check 1 "$(test -e "$record"; printf '%s' "$?")" 'Codex cache clears when process leaves pane'
+check_contains "clear --root $TMP/cache/agent-status --session alpha --pane _7" "$(cat "$TMP/runtime.log")" 'Codex cleanup uses canonical runtime-aware clear path'
 
 # The asynchronous refresher owns inventory collection and coalesces concurrent scans.
 : >"$TMP/ps.log"

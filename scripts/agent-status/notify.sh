@@ -27,19 +27,62 @@ notify_sound_status() {
   printf 'ready'
 }
 
+notify_unlock() {
+  local token="$1" lock="$STATUS_DIR/.notify.lock"
+  [[ "$token" =~ ^owner\.[0-9]+\.[0-9]+$ ]] || return 1
+  rmdir "$lock/$token" 2>/dev/null || return 1
+  rmdir "$lock" 2>/dev/null || true
+}
+
+notify_reclaim_lock() {
+  local lock="$STATUS_DIR/.notify.lock" owner token
+  for owner in "$lock"/owner.*; do
+    [[ -d "$owner" ]] || continue
+    token="${owner##*/}"
+    notify_unlock "$token"
+    return
+  done
+  rmdir "$lock" 2>/dev/null || true
+}
+
 notify_lock() {
-  local lock="$STATUS_DIR/.notify.lock" attempt=0 age
+  local lock="$STATUS_DIR/.notify.lock" attempt=0 age token
+  NOTIFY_LOCK_TOKEN=''
   while ! mkdir "$lock" 2>/dev/null; do
     age=$(( $(notify_now) - $(date -r "$lock" +%s 2>/dev/null || printf 0) ))
-    ((age > 5)) && rmdir "$lock" 2>/dev/null || true
+    ((age > 5)) && notify_reclaim_lock
     ((++attempt < 100)) || return 1
     sleep 0.02
   done
+  NOTIFY_LOCK_SEQUENCE=$(( ${NOTIFY_LOCK_SEQUENCE:-0} + 1 ))
+  token="owner.$$.$NOTIFY_LOCK_SEQUENCE"
+  mkdir "$lock/$token" 2>/dev/null || return 1
+  NOTIFY_LOCK_TOKEN="$token"
 }
+
+notify_reserve() (
+  local ledger="$1" key="$2" now="$3" last=0 tmp='' lock_token=''
+  cleanup() {
+    [[ -z "$tmp" ]] || rm -f "$tmp"
+    [[ -z "$lock_token" ]] || notify_unlock "$lock_token" || true
+  }
+  trap cleanup EXIT
+  trap 'exit 1' HUP INT TERM
+
+  notify_lock || { notify_debug 'notification lock unavailable'; return 1; }
+  lock_token="$NOTIFY_LOCK_TOKEN"
+  [[ -f "$ledger" ]] && last="$(awk -F '\t' -v key="$key" '$1 == key { print $2; exit }' "$ledger")"
+  [[ "$last" =~ ^[0-9]+$ ]] || last=0
+  ((now - last >= AGENT_STATUS_SOUND_COOLDOWN)) || return 1
+  tmp="$(mktemp "${ledger}.tmp.XXXXXX")" || return 1
+  { printf '%s\t%s\n' "$key" "$now"; [[ -f "$ledger" ]] && awk -F '\t' -v key="$key" '$1 != key' "$ledger"; } >"$tmp"
+  mv -f "$tmp" "$ledger"
+  tmp=''
+)
 
 notify_transition() {
   local state="$1" session="$2" pane="$3" backend="$AGENT_STATUS_SOUND_BACKEND"
-  local sound="$AGENT_STATUS_SOUND_FILE" ledger key now last=0 tmp
+  local sound="$AGENT_STATUS_SOUND_FILE" ledger key now
   [[ "$AGENT_STATUS_SOUND_ENABLED" == 1 ]] || return 0
   notify_attention_state "$state" || return 0
   [[ "$state" != done ]] || sound="/System/Library/Sounds/Hero.aiff"
@@ -52,23 +95,12 @@ notify_transition() {
   esac
 
   mkdir -p "$STATUS_DIR" || return 0
-  notify_lock || { notify_debug 'notification lock unavailable'; return 0; }
   ledger="$STATUS_DIR/notifications.tsv"
   key="${state}|$(printf '%s' "$session" | tr -c '[:alnum:]_.-' '_')|$(printf '%s' "$pane" | tr -c '[:alnum:]_.-' '_')"
   now="$(notify_now)"
-  [[ -f "$ledger" ]] && last="$(awk -F '\t' -v key="$key" '$1 == key { print $2; exit }' "$ledger")"
-  [[ "$last" =~ ^[0-9]+$ ]] || last=0
-  if ((now - last < AGENT_STATUS_SOUND_COOLDOWN)); then
-    rmdir "$STATUS_DIR/.notify.lock"
-    return 0
-  fi
+  notify_reserve "$ledger" "$key" "$now" || return 0
   if ! "$backend" "$sound"; then
     notify_debug "backend failed: $backend"
-    rmdir "$STATUS_DIR/.notify.lock"
     return 0
   fi
-  tmp="$(mktemp "${ledger}.tmp.XXXXXX")"
-  { printf '%s\t%s\n' "$key" "$now"; [[ -f "$ledger" ]] && awk -F '\t' -v key="$key" '$1 != key' "$ledger"; } >"$tmp"
-  mv -f "$tmp" "$ledger"
-  rmdir "$STATUS_DIR/.notify.lock"
 }

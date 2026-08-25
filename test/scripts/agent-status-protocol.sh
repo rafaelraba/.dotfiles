@@ -58,6 +58,16 @@ check idle "$("$SCRIPT" get malformed)" 'malformed record recovery'
 wait
 check done "$("$SCRIPT" get race)" 'last accepted event'
 
+# Producer revisions are monotonic only within one producer. A pane takeover
+# must not compare epoch-millisecond and epoch-second scales.
+"$SCRIPT" set permission producer-scale %5 opencode 999000
+"$SCRIPT" set running producer-scale %5 claude 10
+"$SCRIPT" set done producer-scale %5 claude 9
+IFS=$'\t' read -r _ scale_state _ scale_source scale_event <"$XDG_CACHE_HOME/agent-status/panes/producer-scale__5"
+check running "$scale_state" 'producer takeover accepts its own revision scale'
+check claude "$scale_source" 'producer takeover records canonical source'
+check 10 "$scale_event" 'same-producer stale event remains rejected'
+
 # The OpenCode adapter supplies its source and a monotonic process-local event ID,
 # and keeps only active states fresh without retaining the process after terminal state.
 ADAPTER_BIN="$TMP/adapter-bin"
@@ -420,8 +430,8 @@ check_contains '/dev/ttys001' "$popup_command" 'picker child targets the invokin
 [[ "$popup_command" != *'display-popup'* ]] || fail=1
 check 1 "$(grep -c '^list-panes -a' "$PICKER_LOG" || true)" 'picker opens with one bulk snapshot'
 
-# Sound is opt-in, synchronous for deterministic tests, and deduplicated by
-# attention state plus session/pane identity.
+# Sound is opt-in, synchronous for deterministic tests, and emitted only for
+# accepted canonical transitions into attention states.
 SOUND_BIN="$TMP/sound-bin"
 SOUND_LOG="$TMP/sound.log"
 SOUND_FILE="$TMP/sound file.aiff"
@@ -447,17 +457,71 @@ sound_set() {
 sound_set 100 permission 1
 sound_set 110 permission 2
 sound_set 140 permission 3
-check 2 "$(wc -l <"$SOUND_LOG" | tr -d ' ')" 'sound cooldown and expiry'
+sound_set 500 permission 4
+check 1 "$(wc -l <"$SOUND_LOG" | tr -d ' ')" 'same-state polling never replays sound after cooldown'
 check "1:$SOUND_FILE" "$(sed -n '1p' "$SOUND_LOG")" 'sound path remains one argv'
-sound_set 141 error 4
+sound_set 501 running 5
+sound_set 502 permission 6
+check 2 "$(wc -l <"$SOUND_LOG" | tr -d ' ')" 'genuine leave and re-entry can notify again'
+sound_set 503 error 7
 check 3 "$(wc -l <"$SOUND_LOG" | tr -d ' ')" 'distinct attention event has separate ledger identity'
-sound_set 142 done 5
-sound_set 150 done 6
-check 4 "$(wc -l <"$SOUND_LOG" | tr -d ' ')" 'done sound cooldown'
+sound_set 504 done 8
+sound_set 540 done 9
+check 4 "$(wc -l <"$SOUND_LOG" | tr -d ' ')" 'same done state does not replay after cooldown'
 check '1:/System/Library/Sounds/Hero.aiff' "$(sed -n '4p' "$SOUND_LOG")" 'done uses the macOS Hero sound'
 sed 's/AGENT_STATUS_SOUND_BACKEND=afplay/AGENT_STATUS_SOUND_BACKEND=paplay/' "$TMP/sound.conf" >"$TMP/paplay.conf"
-AGENT_STATUS_CONFIG="$TMP/paplay.conf" AGENT_STATUS_NOW=152 SOUND_LOG="$SOUND_LOG" PATH="$SOUND_BIN:$PATH" "$SCRIPT" set error sound %10 adapter 5
+AGENT_STATUS_CONFIG="$TMP/paplay.conf" AGENT_STATUS_NOW=542 SOUND_LOG="$SOUND_LOG" PATH="$SOUND_BIN:$PATH" "$SCRIPT" set error sound %10 adapter 5
 check 5 "$(wc -l <"$SOUND_LOG" | tr -d ' ')" 'allowlisted paplay backend'
+
+# The cooldown reservation is committed and unlocked before playback. A backend
+# interrupted after observing that reservation cannot cause unbounded retries.
+INTERRUPT_BIN="$TMP/interrupt-bin"
+INTERRUPT_LOG="$TMP/interrupt.log"
+mkdir -p "$INTERRUPT_BIN"
+cat >"$INTERRUPT_BIN/afplay" <<'EOF'
+#!/usr/bin/env bash
+[[ -s "$XDG_CACHE_HOME/agent-status/notifications.tsv" ]] || exit 99
+[[ ! -d "$XDG_CACHE_HOME/agent-status/.notify.lock" ]] || exit 98
+printf 'reserved-before-backend\n' >>"$INTERRUPT_LOG"
+exit 130
+EOF
+chmod +x "$INTERRUPT_BIN/afplay"
+AGENT_STATUS_CONFIG="$TMP/sound.conf" AGENT_STATUS_NOW=200 INTERRUPT_LOG="$INTERRUPT_LOG" PATH="$INTERRUPT_BIN:$PATH" "$SCRIPT" set permission interrupted %11 adapter 1
+check permission "$(AGENT_STATUS_CONFIG="$TMP/sound.conf" AGENT_STATUS_NOW=200 "$SCRIPT" get interrupted)" 'interrupted backend preserves visual state'
+check 1 "$(wc -l <"$INTERRUPT_LOG" | tr -d ' ')" 'backend observes durable reservation without notification lock'
+AGENT_STATUS_CONFIG="$TMP/sound.conf" AGENT_STATUS_NOW=201 INTERRUPT_LOG="$INTERRUPT_LOG" PATH="$INTERRUPT_BIN:$PATH" "$SCRIPT" set running interrupted %11 adapter 2
+AGENT_STATUS_CONFIG="$TMP/sound.conf" AGENT_STATUS_NOW=202 INTERRUPT_LOG="$INTERRUPT_LOG" PATH="$INTERRUPT_BIN:$PATH" "$SCRIPT" set permission interrupted %11 adapter 3
+check 1 "$(wc -l <"$INTERRUPT_LOG" | tr -d ' ')" 'interrupted backend reservation suppresses retry during cooldown'
+check 1 "$(test -d "$XDG_CACHE_HOME/agent-status/.notify.lock"; printf '%s' "$?")" 'interrupted backend leaves no stale notification lock'
+
+# Stale-lock reclamation can replace an owner before its EXIT trap runs. The
+# old token must not remove the successor's lock when that delayed cleanup runs.
+LOCK_STATUS_DIR="$TMP/notify-lock"
+LOCK_SUCCESSOR="$TMP/notify-lock-successor"
+mkdir -p "$LOCK_STATUS_DIR"
+(
+  STATUS_DIR="$LOCK_STATUS_DIR"
+  source "$ROOT/scripts/agent-status/notify.sh"
+  AGENT_STATUS_NOW="$(date +%s)"
+  notify_lock
+  old_token="$NOTIFY_LOCK_TOKEN"
+  trap 'notify_unlock "$old_token" || true' EXIT
+  AGENT_STATUS_NOW="$((AGENT_STATUS_NOW + 10))"
+  notify_lock
+  printf '%s' "$NOTIFY_LOCK_TOKEN" >"$LOCK_SUCCESSOR"
+)
+successor_token="$(<"$LOCK_SUCCESSOR")"
+check 0 "$(test -d "$LOCK_STATUS_DIR/.notify.lock/$successor_token"; printf '%s' "$?")" 'old lock owner cannot remove successor during EXIT cleanup'
+rmdir "$LOCK_STATUS_DIR/.notify.lock/$successor_token" "$LOCK_STATUS_DIR/.notify.lock"
+
+# Concurrent same-state writers serialize state acceptance and transition
+# detection, so only one process can reserve a sound.
+before_race_sounds="$(wc -l <"$SOUND_LOG" | tr -d ' ')"
+sound_set 700 permission 20 &
+sound_set 700 permission 21 &
+wait
+after_race_sounds="$(wc -l <"$SOUND_LOG" | tr -d ' ')"
+check 1 "$((after_race_sounds - before_race_sounds))" 'concurrent same-state writes emit one transition sound'
 
 # An allowlist rejection or unavailable backend is quiet unless debug is opted in;
 # both cases leave the visual protocol state intact.
@@ -488,7 +552,7 @@ AGENT_STATUS_CONFIG_VERSION=1
 AGENT_STATUS_SOUND_ENABLED=0
 EOF
 macos_default_output="$(AGENT_STATUS_CONFIG="$TMP/macos-default.conf" AGENT_STATUS_PLATFORM=Darwin AGENT_STATUS_NOW=200 SOUND_LOG="$SOUND_LOG" PATH="$FAKE_BIN:$SOUND_BIN:$PATH" "$SCRIPT" set permission macos %13 adapter 1 2>&1)"
-check "1:/System/Library/Sounds/Glass.aiff" "$(sed -n '6p' "$SOUND_LOG")" 'macOS default sound remains one argv'
+check "1:/System/Library/Sounds/Glass.aiff" "$(sed -n '7p' "$SOUND_LOG")" 'macOS default sound remains one argv'
 check permission "$(AGENT_STATUS_CONFIG="$TMP/macos-default.conf" AGENT_STATUS_PLATFORM=Darwin AGENT_STATUS_NOW=200 PATH="$PATH" "$SCRIPT" get macos)" 'macOS default preserves visual state'
 
 # Doctor reports disabled, unsafe, missing backend/file, and ready setups

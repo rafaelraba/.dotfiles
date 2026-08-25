@@ -42,6 +42,7 @@ type Event struct {
 	Revision         uint64
 	Identity         Identity
 	State            string
+	Deleted          bool
 	ProducerRevision uint64
 }
 type Pane struct {
@@ -122,10 +123,21 @@ func ApplyEvent(s Snapshot, e Event) (Snapshot, error) {
 	if err := ValidateIdentity(e.Identity); err != nil {
 		return s, err
 	}
-	if e.State != "" && validState(e.State) == "" {
+	if e.Deleted && e.State != "" || e.State != "" && validState(e.State) == "" {
 		return s, configInvalid
 	}
 	s.Revision = e.Revision
+	if e.Deleted {
+		kept := s.Panes[:0]
+		for _, pane := range s.Panes {
+			if pane.Session != e.Identity.Session || pane.Pane != e.Identity.Pane {
+				kept = append(kept, pane)
+			}
+		}
+		s.Panes = kept
+		deriveSessions(&s)
+		return s, nil
+	}
 	if e.State != "" {
 		updated := false
 		for i := range s.Panes {

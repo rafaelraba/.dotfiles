@@ -26,6 +26,7 @@ type Owner struct {
 
 type ownerRequest struct {
 	event    *Event
+	clear    *Clear
 	cursor   *Cursor
 	response chan ownerResponse
 }
@@ -41,10 +42,16 @@ type Cursor struct {
 	Epoch    string `json:"epoch"`
 	Revision uint64 `json:"revision"`
 }
+type Clear struct {
+	Session string `json:"session"`
+	Pane    string `json:"pane,omitempty"`
+}
 type Request struct {
-	Op     string `json:"op"`
-	Event  Event  `json:"event"`
-	Cursor Cursor `json:"cursor"`
+	Op      string `json:"op"`
+	Event   Event  `json:"event"`
+	Cursor  Cursor `json:"cursor"`
+	Session string `json:"session"`
+	Pane    string `json:"pane"`
 }
 type Response struct {
 	Type     string         `json:"type"`
@@ -60,6 +67,7 @@ type ProtocolEvent struct {
 	Pane             string `json:"pane"`
 	Source           string `json:"source"`
 	State            string `json:"state"`
+	Deleted          bool   `json:"deleted,omitempty"`
 	ProducerRevision uint64 `json:"producer_revision"`
 }
 
@@ -97,11 +105,16 @@ type paneIdentity struct {
 }
 
 func (o *Owner) Publish(event Event) (Snapshot, error) {
-	return o.request(&event)
+	return o.request(&event, nil)
+}
+
+func (o *Owner) Clear(session, pane string) (Snapshot, error) {
+	clear := Clear{Session: session, Pane: pane}
+	return o.request(nil, &clear)
 }
 
 func (o *Owner) Snapshot() Snapshot {
-	snapshot, _ := o.request(nil)
+	snapshot, _ := o.request(nil, nil)
 	return snapshot
 }
 
@@ -118,10 +131,10 @@ func (o *Owner) Subscribe(cursor Cursor) ([]Event, <-chan Event, error) {
 
 func (o *Owner) Close() { o.close.Do(func() { close(o.done) }) }
 
-func (o *Owner) request(event *Event) (Snapshot, error) {
+func (o *Owner) request(event *Event, clear *Clear) (Snapshot, error) {
 	response := make(chan ownerResponse, 1)
 	select {
-	case o.requests <- ownerRequest{event: event, response: response}:
+	case o.requests <- ownerRequest{event: event, clear: clear, response: response}:
 	case <-o.done:
 		return Snapshot{}, configInvalid
 	}
@@ -131,6 +144,20 @@ func (o *Owner) request(event *Event) (Snapshot, error) {
 
 func (o *Owner) run(state Snapshot, expiries map[paneIdentity]int64, config Config, clock func() int64) {
 	last, journal, subscribers := map[Identity]Event{}, []Event{}, map[chan Event]struct{}{}
+	record := func(event Event) {
+		journal = append(journal, event)
+		if len(journal) > 1000 {
+			journal = journal[1:]
+		}
+		for subscriber := range subscribers {
+			select {
+			case subscriber <- event:
+			default:
+				close(subscriber)
+				delete(subscribers, subscriber)
+			}
+		}
+	}
 	for {
 		select {
 		case <-o.done:
@@ -158,6 +185,38 @@ func (o *Owner) run(state Snapshot, expiries map[paneIdentity]int64, config Conf
 				request.response <- ownerResponse{events: replay, stream: stream}
 				continue
 			}
+			if request.clear != nil {
+				clear := *request.clear
+				if !validProtocolID(clear.Session) || (clear.Pane != "" && !validProtocolID(clear.Pane)) {
+					request.response <- ownerResponse{snapshot: current, err: configInvalid}
+					continue
+				}
+				kept := make([]Pane, 0, len(state.Panes))
+				removed := make([]Pane, 0)
+				for _, pane := range state.Panes {
+					if pane.Session == clear.Session && (clear.Pane == "" || pane.Pane == clear.Pane) {
+						removed = append(removed, pane)
+						continue
+					}
+					kept = append(kept, pane)
+				}
+				if len(removed) > 0 {
+					state.Panes = kept
+					deriveSessions(&state)
+					for _, pane := range removed {
+						delete(expiries, paneIdentity{session: pane.Session, pane: pane.Pane})
+						for identity := range last {
+							if identity.Session == pane.Session && identity.Pane == pane.Pane {
+								delete(last, identity)
+							}
+						}
+						state.Revision++
+						record(Event{SchemaVersion: SchemaVersion, Epoch: state.Epoch, Revision: state.Revision, Identity: Identity{Session: pane.Session, Pane: pane.Pane, Source: "runtime"}, Deleted: true})
+					}
+				}
+				request.response <- ownerResponse{snapshot: expiringSnapshot(state, expiries, clock())}
+				continue
+			}
 			if request.event == nil {
 				request.response <- ownerResponse{snapshot: current}
 				continue
@@ -177,18 +236,7 @@ func (o *Owner) run(state Snapshot, expiries map[paneIdentity]int64, config Conf
 				state, last[event.Identity] = next, event
 				now := clock()
 				expiries[paneIdentity{session: event.Identity.Session, pane: event.Identity.Pane}] = expiryAt(now, event.State, config)
-				journal = append(journal, event)
-				if len(journal) > 1000 {
-					journal = journal[1:]
-				}
-				for subscriber := range subscribers {
-					select {
-					case subscriber <- event:
-					default:
-						close(subscriber)
-						delete(subscribers, subscriber)
-					}
-				}
+				record(event)
 			}
 			request.response <- ownerResponse{snapshot: expiringSnapshot(state, expiries, clock()), err: err}
 		}
@@ -220,7 +268,7 @@ func DecodeRequest(frame []byte) (Request, error) {
 		return Request{}, configInvalid
 	}
 	var raw map[string]json.RawMessage
-	if json.Unmarshal(line, &raw) != nil || raw["op"] == nil || !onlyFields(raw, "op", "event", "cursor") {
+	if json.Unmarshal(line, &raw) != nil || raw["op"] == nil || !onlyFields(raw, "op", "event", "cursor", "session", "pane") {
 		return Request{}, configInvalid
 	}
 	var request Request
@@ -243,6 +291,10 @@ func DecodeRequest(frame []byte) (Request, error) {
 		}
 		request.Event = Event{SchemaVersion: event.SchemaVersion, Epoch: event.Epoch, Revision: event.Revision, Identity: Identity{Session: event.Session, Pane: event.Pane, Source: event.Source}, State: event.State, ProducerRevision: event.ProducerRevision}
 		if request.Event.SchemaVersion != SchemaVersion || !validProtocolIdentity(request.Event.Identity) || validState(request.Event.State) == "" {
+			return Request{}, configInvalid
+		}
+	case "clear":
+		if (len(raw) != 2 && len(raw) != 3) || !requiredFields(raw, "session") || !onlyFields(raw, "op", "session", "pane") || !validProtocolID(request.Session) || (request.Pane != "" && !validProtocolID(request.Pane)) {
 			return Request{}, configInvalid
 		}
 	case "subscribe":
@@ -451,6 +503,13 @@ func serveConnection(connection *net.UnixConn, owner *Owner) {
 			return
 		}
 		writeResponse(connection, Response{Type: "ack", Snapshot: snapshot})
+	case "clear":
+		snapshot, err := owner.Clear(request.Session, request.Pane)
+		if err != nil {
+			writeResponse(connection, Response{Type: "error", Code: "invalid"})
+			return
+		}
+		writeResponse(connection, Response{Type: "ack", Snapshot: snapshot})
 	case "subscribe":
 		replay, stream, err := owner.Subscribe(request.Cursor)
 		if err != nil {
@@ -481,7 +540,7 @@ func writeResponse(connection *net.UnixConn, response Response) bool {
 }
 
 func protocolEvent(event Event) *ProtocolEvent {
-	return &ProtocolEvent{SchemaVersion: event.SchemaVersion, Epoch: event.Epoch, Revision: event.Revision, Session: event.Identity.Session, Pane: event.Identity.Pane, Source: event.Identity.Source, State: event.State, ProducerRevision: event.ProducerRevision}
+	return &ProtocolEvent{SchemaVersion: event.SchemaVersion, Epoch: event.Epoch, Revision: event.Revision, Session: event.Identity.Session, Pane: event.Identity.Pane, Source: event.Identity.Source, State: event.State, Deleted: event.Deleted, ProducerRevision: event.ProducerRevision}
 }
 func ownedByCurrentUser(info os.FileInfo) bool {
 	stat, ok := info.Sys().(*syscall.Stat_t)

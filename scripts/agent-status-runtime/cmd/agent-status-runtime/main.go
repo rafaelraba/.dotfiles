@@ -51,6 +51,8 @@ func main() {
 		os.Exit(socketSessions(os.Stdin, os.Stdout))
 	case "publish":
 		os.Exit(publish(options, os.Stdout))
+	case "clear":
+		os.Exit(clear(options, os.Stdout))
 	case "validate":
 		os.Exit(validate(options, os.Stderr))
 	case "doctor":
@@ -148,8 +150,8 @@ func socketEndpoint() (string, error) {
 	return filepath.Join(runtimeDir, "agent-status", "agent-status.sock"), nil
 }
 
-func socketRequest(request any, stdout io.Writer) int {
-	response, _, exit := socketExchange(request)
+func socketRequest(request any, expected string, stdout io.Writer) int {
+	response, _, exit := socketExchange(request, expected)
 	if exit != runtime.ExitComplete {
 		return exit
 	}
@@ -157,7 +159,7 @@ func socketRequest(request any, stdout io.Writer) int {
 	return runtime.ExitComplete
 }
 
-func socketExchange(request any) ([]byte, runtime.Snapshot, int) {
+func socketExchange(request any, expected string) ([]byte, runtime.Snapshot, int) {
 	endpoint, err := safeSocketEndpoint()
 	if err != nil {
 		return nil, runtime.Snapshot{}, runtime.ExitInvalid
@@ -178,13 +180,6 @@ func socketExchange(request any) ([]byte, runtime.Snapshot, int) {
 	response, err := io.ReadAll(io.LimitReader(connection, 1<<20))
 	if err != nil || len(response) == 0 || len(response) >= 1<<20 || !strings.HasSuffix(string(response), "\n") {
 		return nil, runtime.Snapshot{}, runtime.ExitInvalid
-	}
-	expected := "snapshot"
-	if _, ok := request.(struct {
-		Op    string                `json:"op"`
-		Event runtime.ProtocolEvent `json:"event"`
-	}); ok {
-		expected = "ack"
 	}
 	snapshot, valid := strictSocketResponse(response, expected)
 	if !valid {
@@ -250,13 +245,13 @@ func strictSocketResponse(response []byte, expected string) (runtime.Snapshot, b
 func socketSnapshot(stdout io.Writer) int {
 	return socketRequest(struct {
 		Op string `json:"op"`
-	}{Op: "snapshot"}, stdout)
+	}{Op: "snapshot"}, "snapshot", stdout)
 }
 
 func socketSessions(stdin io.Reader, stdout io.Writer) int {
 	_, snapshot, exit := socketExchange(struct {
 		Op string `json:"op"`
-	}{Op: "snapshot"})
+	}{Op: "snapshot"}, "snapshot")
 	if exit != runtime.ExitComplete {
 		return exit
 	}
@@ -327,7 +322,15 @@ func publish(o options, stdout io.Writer) int {
 	return socketRequest(struct {
 		Op    string                `json:"op"`
 		Event runtime.ProtocolEvent `json:"event"`
-	}{Op: "publish", Event: event}, stdout)
+	}{Op: "publish", Event: event}, "ack", stdout)
+}
+
+func clear(o options, stdout io.Writer) int {
+	return socketRequest(struct {
+		Op      string `json:"op"`
+		Session string `json:"session"`
+		Pane    string `json:"pane,omitempty"`
+	}{Op: "clear", Session: o.session, Pane: o.pane}, "ack", stdout)
 }
 
 func parseOptions(args []string) (options, error) {

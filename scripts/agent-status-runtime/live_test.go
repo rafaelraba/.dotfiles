@@ -142,6 +142,59 @@ func TestOwnerSerializesConcurrentPublishes(t *testing.T) {
 	}
 }
 
+func TestOwnerClearRemovesStateAndAllowsSameProducerToReenter(t *testing.T) {
+	owner := NewOwner(Snapshot{SchemaVersion: SchemaVersion})
+	defer owner.Close()
+	event := Event{SchemaVersion: SchemaVersion, Identity: Identity{Session: "work", Pane: "p1", Source: "agent"}, State: "permission", ProducerRevision: 7}
+	if _, err := owner.Publish(event); err != nil {
+		t.Fatal(err)
+	}
+	cleared, err := owner.Clear("work", "p1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cleared.Panes) != 0 || len(cleared.Sessions) != 0 || cleared.Revision != 2 {
+		t.Fatalf("cleared snapshot = %#v", cleared)
+	}
+	reentered, err := owner.Publish(event)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reentered.Panes) != 1 || reentered.Panes[0].State != "permission" || reentered.Revision != 3 {
+		t.Fatalf("reentered snapshot = %#v", reentered)
+	}
+}
+
+func TestOwnerClearRemovesPaneFromSubscribedStateImmediately(t *testing.T) {
+	owner := NewOwner(Snapshot{SchemaVersion: SchemaVersion})
+	defer owner.Close()
+	subscribed := owner.Snapshot()
+	_, stream, err := owner.Subscribe(Cursor{Epoch: subscribed.Epoch, Revision: subscribed.Revision})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := owner.Publish(Event{SchemaVersion: SchemaVersion, Identity: Identity{Session: "work", Pane: "p1", Source: "agent"}, State: "permission", ProducerRevision: 1}); err != nil {
+		t.Fatal(err)
+	}
+	published := <-stream
+	subscribed, err = ApplyEvent(subscribed, published)
+	if err != nil || len(subscribed.Panes) != 1 {
+		t.Fatalf("subscribed publish = %#v, %v", subscribed, err)
+	}
+	cleared, err := owner.Clear("work", "p1")
+	if err != nil || len(cleared.Panes) != 0 {
+		t.Fatalf("Clear() = %#v, %v", cleared, err)
+	}
+	deleted := <-stream
+	if !deleted.Deleted || deleted.State != "" {
+		t.Fatalf("clear event = %#v", deleted)
+	}
+	subscribed, err = ApplyEvent(subscribed, deleted)
+	if err != nil || len(subscribed.Panes) != 0 || len(subscribed.Sessions) != 0 || subscribed.Revision != cleared.Revision {
+		t.Fatalf("subscribed clear = %#v, %v", subscribed, err)
+	}
+}
+
 func TestDecodeRequestRejectsUnsafeFrames(t *testing.T) {
 	for _, frame := range []string{
 		"\n",
@@ -152,6 +205,8 @@ func TestDecodeRequestRejectsUnsafeFrames(t *testing.T) {
 		`{"op":"publish","event":{"schema_version":2,"session":"work","pane":"p1","source":"agent","state":"running","state":"done"}}` + "\n",
 		`{"op":"publish","event":{"schema_version":2,"session":"bad/id","pane":"p1","source":"agent","state":"running"}}` + "\n",
 		`{"op":"subscribe","cursor":{"epoch":"epoch","revision":1,"extra":true}}` + "\n",
+		`{"op":"clear","session":"bad/id","pane":"p1"}` + "\n",
+		`{"op":"clear","pane":"p1"}` + "\n",
 		strings.Repeat("x", 64<<10) + "\n",
 	} {
 		if _, err := DecodeRequest([]byte(frame)); err == nil {
@@ -162,6 +217,8 @@ func TestDecodeRequestRejectsUnsafeFrames(t *testing.T) {
 		`{"op":"snapshot"}` + "\n",
 		`{"op":"publish","event":{"schema_version":2,"session":"work","pane":"p1","source":"agent","state":"running"}}` + "\n",
 		`{"op":"subscribe","cursor":{"epoch":"epoch","revision":1}}` + "\n",
+		`{"op":"clear","session":"work","pane":"p1"}` + "\n",
+		`{"op":"clear","session":"work"}` + "\n",
 	} {
 		if _, err := DecodeRequest([]byte(frame)); err != nil {
 			t.Fatalf("DecodeRequest(%q) error = %v", frame, err)
@@ -342,6 +399,26 @@ func TestServeSocketSerializesConcurrentPublishAndSnapshot(t *testing.T) {
 	group.Wait()
 	if snapshot := socketResponse(t, listener, `{"op":"snapshot"}`+"\n").Snapshot; snapshot.Revision != 2 || len(snapshot.Panes) != 2 {
 		t.Fatalf("snapshot = %#v", snapshot)
+	}
+}
+
+func TestServeSocketClearIsVisibleImmediately(t *testing.T) {
+	root := socketRoot(t)
+	listener, cleanup, err := ListenSocket(root, filepath.Join(root, "runtime.sock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	owner := NewOwner(Snapshot{SchemaVersion: SchemaVersion})
+	defer owner.Close()
+	go ServeSocket(listener, owner)
+	publishSocketEvent(t, listener, "p1", 1)
+	response := socketResponse(t, listener, `{"op":"clear","session":"work","pane":"p1"}`+"\n")
+	if response.Type != "ack" || len(response.Snapshot.Panes) != 0 || len(response.Snapshot.Sessions) != 0 || response.Snapshot.Revision != 2 {
+		t.Fatalf("clear response = %#v", response)
+	}
+	if snapshot := socketResponse(t, listener, `{"op":"snapshot"}`+"\n").Snapshot; len(snapshot.Panes) != 0 || snapshot.Revision != 2 {
+		t.Fatalf("post-clear snapshot = %#v", snapshot)
 	}
 }
 

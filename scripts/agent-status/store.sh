@@ -6,6 +6,9 @@ store_now() {
   printf '%s' "$now"
 }
 
+STORE_STATE_TRANSITIONED=0
+STORE_CLEAR_DIRTY_PATHS=()
+
 store_normalize() {
   case "$1" in
     running|permission|waiting_for_input|blocked|done|idle|error) printf '%s' "$1" ;;
@@ -113,15 +116,27 @@ store_inspect() {
 
 store_set() {
   local requested="$1" session="$2" pane="$3" source="${4:-unknown}" event="${5:-0}"
-  local path old_event now tmp state
+  local path old_event old_source old_state old_version now tmp state
+  STORE_STATE_TRANSITIONED=0
   state="$(store_normalize "$requested")"
   [[ "$source" =~ ^[[:alnum:]_.-]+$ && "$event" =~ ^[0-9]+$ ]] || return 1
   mkdir -p "$SESSION_DIR" "$PANE_DIR"
   store_lock || return 1
   path="$(store_path "$session" "$pane")"
   old_event=0
-  [[ -f "$path" ]] && IFS=$'\t' read -r _ _ _ _ old_event <"$path" || true
-  if [[ "$old_event" =~ ^[0-9]+$ ]] && ((event < old_event)); then
+  old_source=''
+  old_state=idle
+  if [[ -f "$path" ]]; then
+    IFS=$'\t' read -r old_version old_state _ old_source old_event <"$path" || true
+    if [[ -z "$old_state" ]]; then
+      old_state="$(store_normalize "$old_version")"
+      old_source=''
+      old_event=0
+    else
+      old_state="$(store_normalize "$old_state")"
+    fi
+  fi
+  if [[ "$source" == "$old_source" && "$old_event" =~ ^[0-9]+$ ]] && ((event < old_event)); then
     rmdir "$STATUS_DIR/.lock"
     return 2
   fi
@@ -130,10 +145,30 @@ store_set() {
   tmp="$(mktemp "${path}.tmp.XXXXXX")"
   printf '1\t%s\t%s\t%s\t%s\n' "$state" "$now" "$source" "$event" >"$tmp"
   mv -f "$tmp" "$path"
+  [[ "$state" != "$old_state" ]] && STORE_STATE_TRANSITIONED=1
   rmdir "$STATUS_DIR/.lock"
 }
 
 store_clear() {
-  local session="$1" pane="$2"
-  [[ -n "$pane" ]] && rm -f "$(store_path "$session" "$pane")" || rm -f "$(store_path "$session" '')" "$PANE_DIR/$(sanitize_session "$session")_"*
+  local session="$1" pane="$2" path
+  local paths=()
+  STORE_CLEAR_DIRTY_PATHS=()
+  mkdir -p "$SESSION_DIR" "$PANE_DIR"
+  store_lock || return 1
+  if [[ -n "$pane" ]]; then
+    paths+=("$(store_path "$session" "$pane")")
+  else
+    paths+=("$(store_path "$session" '')")
+    for path in "$PANE_DIR/$(sanitize_session "$session")_"*; do
+      [[ -f "$path" ]] && paths+=("$path")
+    done
+  fi
+  for path in "${paths[@]}"; do
+    if [[ "${AGENT_STATUS_RUNTIME_ENABLED:-0}" == 1 ]]; then
+      store_mark_dirty "$path" clear
+      STORE_CLEAR_DIRTY_PATHS+=("$path")
+    fi
+    rm -f "$path"
+  done
+  rmdir "$STATUS_DIR/.lock"
 }

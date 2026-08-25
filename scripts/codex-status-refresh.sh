@@ -137,5 +137,10 @@ for file in "$PANE_DIR"/*; do
     key="$session"$'\034'"$pane"
     case $'\n'"$live_keys" in *$'\n'"$key"$'\n'*) matched=1; break ;; esac
   done < <(printf '%s\n' "$snapshot" | tr '\t' '\034')
-  ((matched)) || rm -f "$file"
+  if (( ! matched )); then
+    filename="${file##*/}"
+    session="${filename%__*}"
+    pane="_${filename##*__}"
+    "$STATUS" clear "$session" "$pane" >/dev/null 2>&1 || true
+  fi
 done

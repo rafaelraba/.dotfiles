@@ -169,6 +169,24 @@ EOF
     AGENT_STATUS_RUNTIME_ENABLED=1 AGENT_STATUS_RUNTIME_PATH="$BIN" AGENT_STATUS_RUNTIME_FAST_PATH="$BIN" XDG_RUNTIME_DIR="$runtime_dir" \
     PATH="$TMP/live-render-bin:$PATH" "$ROOT/scripts/status-sessions.sh" work)"
   check ' [? work 1]  ' "$live_fast_updated" 'fast rendering consumes the live socket state'
+  run env AGENT_STATUS_CONFIG="$TMP/missing.conf" AGENT_STATUS_STATE_DIR="$TMP/state" AGENT_STATUS_NOW=100 \
+    AGENT_STATUS_RUNTIME_ENABLED=1 AGENT_STATUS_RUNTIME_PATH="$BIN" XDG_RUNTIME_DIR="$runtime_dir" \
+    "$ROOT/scripts/agent-status.sh" clear work %1
+  check 0 "$status" 'public clear exits successfully'
+  check 1 "$(test -e "$TMP/state/panes/work__1"; printf '%s' "$?")" 'public clear removes fallback state'
+  run env XDG_RUNTIME_DIR="$runtime_dir" "$BIN" socket-snapshot --root "$TMP/state"
+  check 0 "$status" 'socket snapshot remains available after clear'
+  clear_snapshot="$(<"$TMP/stdout")"
+  run python3 - "$clear_snapshot" <<'PY'
+import json
+import sys
+
+response = json.loads(sys.argv[1])
+if any(pane.get("session") == "work" and pane.get("pane") == "_1" for pane in response["snapshot"]["panes"]):
+    raise ValueError("cleared pane remains visible in daemon")
+PY
+  check 0 "$status" 'public clear removes daemon state immediately'
+  check 0 "$(find "$TMP/state/.runtime-dirty" -type f -print -quit 2>/dev/null | wc -l | tr -d ' ')" 'clear acknowledgement removes dirty marker'
   kill -TERM "$serve_pid" 2>/dev/null || true
   wait "$serve_pid" 2>/dev/null || true
 
