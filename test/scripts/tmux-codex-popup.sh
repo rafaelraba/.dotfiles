@@ -187,6 +187,65 @@ check_contains '#{?#{m:_*,#{session_name}},0,1}' "$(cat "$TMP/new.log")" 'naviga
 TMUX_LOG="$TMP/new.log" PATH="$BIN:$PATH" "$ROOT/scripts/tmux-switch-session.sh" next /dev/ttys001 alpha
 check_contains 'switch-client -c /dev/ttys001 -t beta' "$(cat "$TMP/new.log")" 'next navigation targets the invoking client from alpha to beta'
 
+: >"$TMP/creator.log"
+TMUX_LOG="$TMP/creator.log" COLLISIONS='project' PATH="$BIN:$PATH" \
+  "$ROOT/scripts/tmux-new-session.sh" /tmp/project /dev/ttys001 %7 80 24
+creator_float_invocation="$(cat "$TMP/creator.log")"
+
+: >"$TMP/new.log"
+TMUX_LOG="$TMP/new.log" PATH="$BIN:$PATH" \
+  "$ROOT/scripts/tmux-rename-session.sh" '$7' alpha /dev/ttys001 /tmp/project %9 80 24
+rename_float_invocation="$(cat "$TMP/new.log")"
+
+check_contains 'new-pane -P -F #{pane_id} -f -c /tmp/project -x 56 -y 1 -X 12 -Y 11' "$creator_float_invocation" 'creator opens a centered one-line native float'
+check_contains 'new-pane -P -F #{pane_id} -f -c /tmp/project -x 56 -y 1 -X 12 -Y 11' "$rename_float_invocation" 'rename matches creator native-float geometry'
+check_contains '-s bg=#1d2021,fg=#d4be98 -S fg=#7aa2f7 -R fg=#7aa2f7 -t %7' "$creator_float_invocation" 'creator uses explicit popup colors and borders'
+check_contains '-s bg=#1d2021,fg=#d4be98 -S fg=#7aa2f7 -R fg=#7aa2f7 -t %9' "$rename_float_invocation" 'rename matches creator popup colors and borders'
+check_contains "$ROOT/scripts/tmux-rename-session-popup.sh \$7 alpha /dev/ttys001" "$rename_float_invocation" 'rename safely transports the invoking session and client context as command arguments'
+check_contains 'set-option -p -t %50 @rename_session_picker 1' "$rename_float_invocation" 'rename marks its native floating pane'
+check_contains 'select-pane -t %50' "$rename_float_invocation" 'rename selects its native floating pane like creator'
+[[ "$rename_float_invocation" != *'display-popup'* ]] || { printf 'FAIL: rename must use the creator native-float path\n' >&2; fail=1; }
+
+: >"$TMP/new.log"; : >"$TMP/popup.out"
+printf '\n' | TMUX_LOG="$TMP/new.log" COLLISIONS='' PATH="$BIN:$PATH" \
+  "$ROOT/scripts/tmux-rename-session-popup.sh" '$7' alpha /dev/ttys001 >"$TMP/popup.out" 2>&1
+check_contains 'Workspace name:' "$(cat "$TMP/popup.out")" 'rename popup renders the workspace prompt'
+check_contains 'alpha' "$(cat "$TMP/popup.out")" 'rename popup pre-fills the current session name'
+[[ "$(cat "$TMP/new.log")" != *'rename-session'* ]] || { printf 'FAIL: unchanged rename input must be a no-op\n' >&2; fail=1; }
+
+: >"$TMP/new.log"
+printf '\025beta\n' | TMUX_LOG="$TMP/new.log" COLLISIONS='' PATH="$BIN:$PATH" \
+  "$ROOT/scripts/tmux-rename-session-popup.sh" '$7' alpha /dev/ttys001 >"$TMP/popup.out" 2>&1
+check_contains 'rename-session -t $7 beta' "$(cat "$TMP/new.log")" 'rename targets the exact invoking session ID'
+check_contains 'refresh-client -S -t /dev/ttys001' "$(cat "$TMP/new.log")" 'successful rename refreshes the invoking client'
+
+: >"$TMP/new.log"; : >"$TMP/popup.out"
+printf '\025\n\025beta\n' | TMUX_LOG="$TMP/new.log" COLLISIONS='' PATH="$BIN:$PATH" \
+  "$ROOT/scripts/tmux-rename-session-popup.sh" '$7' alpha /dev/ttys001 >"$TMP/popup.out" 2>&1
+check_contains 'Name cannot be empty.' "$(cat "$TMP/popup.out")" 'rename reports empty input and allows retry'
+check_contains 'resize-pane -y 2' "$(cat "$TMP/new.log")" 'rename expands to creator error height before rendering an error'
+check_contains 'rename-session -t $7 beta' "$(cat "$TMP/new.log")" 'rename succeeds after an empty-input retry'
+
+: >"$TMP/new.log"
+printf '\033' | TMUX_LOG="$TMP/new.log" COLLISIONS='' PATH="$BIN:$PATH" \
+  "$ROOT/scripts/tmux-rename-session-popup.sh" '$7' alpha /dev/ttys001 >"$TMP/popup.out" 2>&1 || true
+[[ "$(cat "$TMP/new.log")" != *'rename-session'* ]] || { printf 'FAIL: Escape must cancel rename without changes\n' >&2; fail=1; }
+
+: >"$TMP/new.log"; : >"$TMP/popup.out"
+printf '\025bad.name\n\025beta\n\025gamma\n' | TMUX_LOG="$TMP/new.log" COLLISIONS='beta' PATH="$BIN:$PATH" \
+  "$ROOT/scripts/tmux-rename-session-popup.sh" '$7' alpha /dev/ttys001 >"$TMP/popup.out" 2>&1
+check_contains 'Use letters, numbers, underscores, or hyphens.' "$(cat "$TMP/popup.out")" 'rename rejects invalid names and allows retry'
+check_contains 'Session "beta" already exists.' "$(cat "$TMP/popup.out")" 'rename reports collisions and allows retry'
+check_contains 'resize-pane -y 2' "$(cat "$TMP/new.log")" 'rename keeps validation errors in the creator two-line presentation'
+check_contains 'rename-session -t $7 gamma' "$(cat "$TMP/new.log")" 'rename succeeds after invalid and colliding retries'
+
+rename_binding="$(grep "^bind '\$'" "$ROOT/editors/tmux/tmux.conf")"
+check_contains 'tmux-rename-session.sh #{q:session_id} #{q:session_name} #{q:client_tty} #{q:pane_current_path} #{q:pane_id} #{window_width} #{window_height}' "$rename_binding" 'rename binding captures creator-equivalent context and geometry'
+if [[ "$rename_binding" == *'command-prompt'* ]] || grep -Eq 'command-prompt|display-popup|fzf' "$ROOT/scripts/tmux-rename-session"*.sh; then
+  printf 'FAIL: rename popup must not fall back to command-prompt, display-popup, or fzf\n' >&2
+  fail=1
+fi
+
 : >"$TMP/new.log"; : >"$TMP/popup.out"
 printf '\025project-3\n' | (cd "$popup_path" && TMUX_LOG="$TMP/new.log" COLLISIONS='project project-2' PATH="$BIN:$PATH" \
   "$ROOT/scripts/tmux-new-session-popup.sh" /dev/ttys001) >"$TMP/popup.out" 2>&1
@@ -198,12 +257,6 @@ if grep -Eq 'fzf|read -r -e|compgen' "$ROOT/scripts/tmux-new-session-popup.sh"; 
   printf 'FAIL: workspace popup must not use a completion or selector UI\n' >&2
   fail=1
 fi
-
-: >"$TMP/new.log"
-TMUX_LOG="$TMP/new.log" COLLISIONS='project' PATH="$BIN:$PATH" "$ROOT/scripts/tmux-new-session.sh" /tmp/project /dev/ttys001 %7 80 24
-check_contains 'new-pane -P -F #{pane_id} -f -c /tmp/project -x 56 -y 1 -X 12 -Y 11' "$(cat "$TMP/new.log")" 'collision path opens a one-line native workspace float'
-check_contains '-S fg=#7aa2f7 -R fg=#7aa2f7 -t %7' "$(cat "$TMP/new.log")" 'workspace float uses explicit blue pane borders'
-[[ "$(cat "$TMP/new.log")" != *'new-session -d'* ]] || fail=1
 
 : >"$TMP/new.log"
 special_path="$TMP/path with \"double quotes\" and 'single quotes';\$(touch TMUX_POPUP_INJECTED)"
